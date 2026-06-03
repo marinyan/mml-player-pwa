@@ -10,6 +10,27 @@ export interface NoteEvent {
   connectedToNext: boolean;
 }
 
+export interface TempoEvent {
+  type: "setTempo";
+  timeSec: number;
+  tempo: number;
+}
+
+export interface SongMaster {
+  tempoEvents: TempoEvent[];
+}
+
+export interface SongTrack {
+  trackIndex: number;
+  events: NoteEvent[];
+}
+
+export interface Song {
+  master: SongMaster;
+  tracks: SongTrack[];
+  durationSec: number;
+}
+
 export interface TrackState {
   tempo: number;
   octave: number;
@@ -18,13 +39,6 @@ export interface TrackState {
   gate: number;
   timbre: number;
   cursorSec: number;
-}
-
-export interface CompileResult {
-  events: NoteEvent[];
-  tempo: number;
-  durationSec: number;
-  trackCount: number;
 }
 
 export class MmlError extends Error {

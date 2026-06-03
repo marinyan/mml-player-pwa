@@ -1,5 +1,5 @@
 import { parseMml, type MmlCommand } from "./parser";
-import { MmlError, type CompileResult, type NoteEvent, type TrackState } from "./types";
+import { MmlError, type NoteEvent, type Song, type TempoEvent, type TrackState } from "./types";
 
 const noteSemitones: Record<string, number> = {
   C: 0,
@@ -26,29 +26,39 @@ interface CompilerState extends TrackState {
   lastNoteEvent: NoteEvent | null;
 }
 
-export function compileMml(source: string): CompileResult {
+export function compileMml(source: string): Song {
   const ast = parseMml(source);
-  const events: NoteEvent[] = [];
-  let lastTempo = initialState.tempo;
+  const tracks = ast.tracks.map((_, trackIndex) => ({ trackIndex, events: [] as NoteEvent[] }));
+  const tempoEvents: TempoEvent[] = [];
 
   ast.tracks.forEach((track, trackIndex) => {
     const state: CompilerState = { ...initialState, connectPending: false, lastNoteEvent: null };
     for (const command of track.commands) {
       const event = applyCommand(command, state, trackIndex);
-      if (command.kind === "tempo") lastTempo = command.value;
-      if (event) events.push(event);
+      if (command.kind === "tempo") {
+        tempoEvents.push({ type: "setTempo", timeSec: state.cursorSec, tempo: command.value });
+      }
+      if (event) tracks[trackIndex].events.push(event);
     }
     if (state.connectPending) {
       throw new MmlError(track.commands.at(-1)?.position ?? 0, "Tie/slur must be followed by a note");
     }
   });
 
-  events.sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
+  for (const songTrack of tracks) {
+    songTrack.events.sort((a, b) => a.startTimeSec - b.startTimeSec);
+  }
+
   return {
-    events,
-    tempo: lastTempo,
-    durationSec: events.reduce((max, event) => Math.max(max, event.startTimeSec + event.durationSec), 0),
-    trackCount: ast.tracks.length
+    master: {
+      tempoEvents: tempoEvents.sort((a, b) => a.timeSec - b.timeSec)
+    },
+    tracks,
+    durationSec: tracks.reduce(
+      (max, track) =>
+        Math.max(max, ...track.events.map((event) => event.startTimeSec + event.durationSec), 0),
+      0
+    )
   };
 }
 

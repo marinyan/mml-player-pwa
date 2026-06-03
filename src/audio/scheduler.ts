@@ -1,4 +1,4 @@
-import type { CompileResult } from "../mml/types";
+import type { NoteEvent, Song } from "../mml/types";
 import { Synth } from "./synth";
 
 export type PlaybackStatus = "idle" | "playing" | "stopped" | "ended";
@@ -19,7 +19,7 @@ export class Scheduler {
 
   constructor(private readonly callbacks: SchedulerCallbacks = {}) {}
 
-  async play(compiled: CompileResult): Promise<void> {
+  async play(song: Song): Promise<void> {
     this.stop("stopped");
     this.audioContext = new AudioContext();
     await this.audioContext.resume();
@@ -27,9 +27,10 @@ export class Scheduler {
     this.startAudioTime = this.audioContext.currentTime + 0.08;
     this.nextEventIndex = 0;
     this.setStatus("playing");
-    this.scheduleAhead(compiled);
-    this.timerId = window.setInterval(() => this.scheduleAhead(compiled), 60);
-    this.tickTimerId = window.setInterval(() => this.reportPosition(compiled.durationSec), 100);
+    const events = flattenSongEvents(song);
+    this.scheduleAhead(song, events);
+    this.timerId = window.setInterval(() => this.scheduleAhead(song, events), 60);
+    this.tickTimerId = window.setInterval(() => this.reportPosition(song.durationSec), 100);
   }
 
   stop(nextStatus: PlaybackStatus = "stopped"): void {
@@ -58,22 +59,22 @@ export class Scheduler {
     return this.status;
   }
 
-  private scheduleAhead(compiled: CompileResult): void {
+  private scheduleAhead(song: Song, events: NoteEvent[]): void {
     if (!this.audioContext || !this.synth) return;
 
     const horizonSec = 0.35;
     const playheadSec = this.audioContext.currentTime - this.startAudioTime;
 
     while (
-      this.nextEventIndex < compiled.events.length &&
-      compiled.events[this.nextEventIndex].startTimeSec <= playheadSec + horizonSec
+      this.nextEventIndex < events.length &&
+      events[this.nextEventIndex].startTimeSec <= playheadSec + horizonSec
     ) {
-      const event = compiled.events[this.nextEventIndex];
+      const event = events[this.nextEventIndex];
       this.synth.schedule(event, this.startAudioTime + event.startTimeSec);
       this.nextEventIndex += 1;
     }
 
-    if (playheadSec >= compiled.durationSec + 0.05) {
+    if (playheadSec >= song.durationSec + 0.05) {
       this.stop("ended");
     }
   }
@@ -88,4 +89,10 @@ export class Scheduler {
     this.status = status;
     this.callbacks.onStatusChange?.(status);
   }
+}
+
+function flattenSongEvents(song: Song): NoteEvent[] {
+  return song.tracks
+    .flatMap((track) => track.events)
+    .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
 }

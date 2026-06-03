@@ -1,6 +1,6 @@
 import { Scheduler, type PlaybackStatus } from "./audio/scheduler";
 import { compileMml } from "./mml/compiler";
-import { MmlError, type CompileResult } from "./mml/types";
+import { MmlError, type Song } from "./mml/types";
 import { loadSavedMml, saveMml } from "./storage/localStorage";
 
 const defaultMml = "T120 O4 L8 V12 Q7\nC D E F G A B > C";
@@ -72,7 +72,7 @@ export function mountApp(root: HTMLElement): void {
   const offlineBadge = getElement<HTMLElement>("offlineBadge");
 
   input.value = loadSavedMml(defaultMml);
-  let compiled: CompileResult | null = null;
+  let compiled: Song | null = null;
 
   const scheduler = new Scheduler({
     onStatusChange: (status) => {
@@ -88,11 +88,11 @@ export function mountApp(root: HTMLElement): void {
     offlineBadge.classList.toggle("offline", !navigator.onLine);
   };
 
-  const compileCurrent = (): CompileResult | null => {
+  const compileCurrent = (): Song | null => {
     try {
       const next = compileMml(input.value);
-      tempoValue.textContent = String(next.tempo);
-      message.textContent = `${next.events.length} events, ${next.trackCount} track(s), ${next.durationSec.toFixed(1)}s`;
+      tempoValue.textContent = String(displayTempo(next));
+      message.textContent = `${eventCount(next)} events, ${next.tracks.length} track(s), ${next.durationSec.toFixed(1)}s`;
       message.classList.remove("error");
       compiled = next;
       return next;
@@ -154,7 +154,7 @@ export function mountApp(root: HTMLElement): void {
 
   playButton.addEventListener("click", () => {
     const next = compileCurrent();
-    if (!next || next.events.length === 0) return;
+    if (!next || eventCount(next) === 0) return;
     void scheduler.play(next);
   });
 
@@ -193,4 +193,12 @@ function statusLabel(status: PlaybackStatus): string {
     case "ended":
       return "Ended";
   }
+}
+
+function eventCount(song: Song): number {
+  return song.tracks.reduce((count, track) => count + track.events.length, 0);
+}
+
+function displayTempo(song: Song): number {
+  return song.master.tempoEvents.at(-1)?.tempo ?? 120;
 }
