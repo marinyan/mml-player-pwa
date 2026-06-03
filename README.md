@@ -26,6 +26,7 @@ iPhone Safariで使える、オフライン対応の最小MMLプレイヤーPWA�
 - `V<number>`: 音量 0-15
 - `Q<number>`: ゲートタイム 1-8
 - `@<number>`: 音色変更 0-15
+- `&`: タイ / スラー。例 `C&C`、`C&D`
 - `,`: トラック区切り
 
 例:
@@ -52,7 +53,7 @@ FM音色はWeb Audio APIのOscillatorNodeを使った軽量な2オペレータ�
 例:
 
 ```mml
-T132 O4 L8 @0 C D E F, O5 @4 C E G > C, O2 @5 C4 G4, O3 @6 C8 R8 C8 R8
+T132 O4 L8 @0 C&C D E F, O5 @4 C&E G > C, O2 @5 C4 G4, O3 @6 C8 R8 C8 R8
 ```
 
 ## 開発

@@ -6,6 +6,7 @@ export interface NoteEvent {
   frequencyHz: number | null;
   volume: number;
   timbre: number;
+  slurred: boolean;
 }
 
 export interface TrackState {

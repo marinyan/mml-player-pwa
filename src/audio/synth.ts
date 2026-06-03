@@ -1,6 +1,7 @@
 import type { NoteEvent } from "../mml/types";
 
 const attackSec = 0.008;
+const slurAttackSec = 0.001;
 const releaseSec = 0.025;
 
 export class Synth {
@@ -19,11 +20,12 @@ export class Synth {
 
     const gain = this.audioContext.createGain();
     const endAt = startAt + event.gateDurationSec;
-    const releaseStart = Math.max(startAt + attackSec, endAt - releaseSec);
+    const noteAttackSec = event.slurred ? slurAttackSec : attackSec;
+    const releaseStart = Math.max(startAt + noteAttackSec, endAt - releaseSec);
     const peak = Math.min(Math.max(event.volume, 0), 1);
 
     gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0001), startAt + attackSec);
+    gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0001), startAt + noteAttackSec);
     gain.gain.setValueAtTime(Math.max(peak, 0.0001), releaseStart);
     gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
     gain.connect(this.masterGain);

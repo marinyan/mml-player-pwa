@@ -8,6 +8,7 @@ export type MmlCommand =
   | { kind: "volume"; value: number; position: number }
   | { kind: "gate"; value: number; position: number }
   | { kind: "timbre"; value: number; position: number }
+  | { kind: "connect"; position: number }
   | { kind: "octaveShift"; delta: -1 | 1; position: number }
   | { kind: "note"; note: string; accidental: number; length: number | null; dotted: boolean; position: number }
   | { kind: "rest"; length: number | null; dotted: boolean; position: number };
@@ -80,6 +81,10 @@ class Parser {
       const number = this.readRequiredNumber(token.position, "@ requires a number");
       if (number < 0 || number > 15) throw new MmlError(token.position, "Timbre must be 0-15");
       return { kind: "timbre", value: number, position: token.position };
+    }
+
+    if (value === "&") {
+      return { kind: "connect", position: token.position };
     }
 
     if (value === "<" || value === ">") {

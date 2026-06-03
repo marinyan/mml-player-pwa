@@ -54,6 +54,28 @@ describe("compileMml", () => {
     expect(result.events.map((event) => event.timbre)).toEqual([1, 4, 5, 6]);
   });
 
+  it("ties matching notes with &", () => {
+    const result = compileMml("T120 L4 C&C");
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].durationSec).toBeCloseTo(1);
+    expect(result.events[0].gateDurationSec).toBeCloseTo(1);
+    expect(result.events[0].slurred).toBe(false);
+  });
+
+  it("slurs different notes with &", () => {
+    const result = compileMml("T120 L4 C&D");
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0].gateDurationSec).toBeCloseTo(0.5);
+    expect(result.events[1].startTimeSec).toBeCloseTo(0.5);
+    expect(result.events[1].slurred).toBe(true);
+  });
+
+  it("throws when & is not between notes", () => {
+    expect(() => compileMml("&C")).toThrow(MmlError);
+    expect(() => compileMml("C&")).toThrow(MmlError);
+    expect(() => compileMml("C&R")).toThrow(MmlError);
+  });
+
   it("throws on invalid characters", () => {
     expect(() => compileMml("C X")).toThrow(MmlError);
   });
