@@ -165,3 +165,13 @@ GitHub側では、Repository SettingsのPagesでSourceを `GitHub Actions` に�
 - iCloud連携
 - ファイル関連付け
 - 高度なMML互換性
+
+## WAVエクスポート
+
+Fileメニューの `Export WAV` から、現在エディタにあるMMLを `mml-export.wav` として保存できます。WAV出力は現在のparser/compilerが生成するSongを使うため、`%fm ... %end` の2OP/4OP FM音色、内蔵音色、複数トラック、リピート展開、拍子/小節線による内部休符補完や仮想小節線処理を反映します。
+
+出力形式は 44.1kHz / 16bit PCM / mono のRIFF/WAVEです。長い曲ではファイルサイズが大きくなるため、推定サイズが大きい場合は確認を出します。
+
+WAVエクスポートは音声ファイルの保存であり、MML本文のtxt/mmlエクスポートとは別扱いです。WAVを書き出しても「未エクスポート/最後のエクスポート後に変更あり」の状態は解除されません。MML本文を保存済みにするのは `Export mml` のみです。
+
+リアルタイム再生とWAV出力は同じ `Synth` 音源処理を使う方針です。WAV専用に別の音色処理を持たせず、AudioContextとOfflineAudioContextの両方から同じスケジューリング経路を使います。

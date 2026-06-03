@@ -1,4 +1,5 @@
 import { Scheduler, type PlaybackStatus } from "./audio/scheduler";
+import { estimateWavBytes, renderSongToWav } from "./audio/wav";
 import { compileMml } from "./mml/compiler";
 import { MmlError, type Song } from "./mml/types";
 import { createMmlTextBlob } from "./storage/fileText";
@@ -58,6 +59,7 @@ export function mountApp(root: HTMLElement): void {
               <button id="loadDemoButton" type="button">Load demo song</button>
               <button id="importButton" type="button">Import txt/mml</button>
               <button id="exportButton" type="button">Export mml</button>
+              <button id="wavExportButton" type="button">Export WAV</button>
             </div>
           </details>
           <span id="offlineBadge" class="badge">checking</span>
@@ -102,6 +104,7 @@ export function mountApp(root: HTMLElement): void {
   const loadDemoButton = getElement<HTMLButtonElement>("loadDemoButton");
   const importButton = getElement<HTMLButtonElement>("importButton");
   const exportButton = getElement<HTMLButtonElement>("exportButton");
+  const wavExportButton = getElement<HTMLButtonElement>("wavExportButton");
   const playButton = getElement<HTMLButtonElement>("playButton");
   const stopButton = getElement<HTMLButtonElement>("stopButton");
   const rewindButton = getElement<HTMLButtonElement>("rewindButton");
@@ -192,18 +195,45 @@ export function mountApp(root: HTMLElement): void {
   exportButton.addEventListener("click", () => {
     fileMenu.open = false;
     const blob = createMmlTextBlob(input.value);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "mml-player.mml";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadBlob(blob, "mml-player.mml");
     lastExportedMml = input.value;
     saveLastExportedMml(input.value);
     message.textContent = "Exported current MML";
     message.classList.remove("error");
+  });
+
+  wavExportButton.addEventListener("click", () => {
+    fileMenu.open = false;
+    const song = compileCurrent();
+    if (!song || eventCount(song) === 0) return;
+
+    const estimatedBytes = estimateWavBytes(song);
+    if (estimatedBytes === 0) {
+      message.textContent = "WAV export requires at least one audible note";
+      message.classList.add("error");
+      return;
+    }
+    if (estimatedBytes > 50 * 1024 * 1024 && !window.confirm(`Estimated WAV size is ${formatBytes(estimatedBytes)}. Continue?`)) {
+      return;
+    }
+
+    wavExportButton.disabled = true;
+    message.textContent = "Rendering WAV...";
+    message.classList.remove("error");
+
+    void renderSongToWav(song)
+      .then((blob) => {
+        downloadBlob(blob, "mml-export.wav");
+        message.textContent = `Exported WAV (${formatBytes(blob.size)})`;
+        message.classList.remove("error");
+      })
+      .catch((error: unknown) => {
+        message.textContent = error instanceof Error ? error.message : "WAV export failed";
+        message.classList.add("error");
+      })
+      .finally(() => {
+        wavExportButton.disabled = false;
+      });
   });
 
   playButton.addEventListener("click", () => {
@@ -255,6 +285,22 @@ function eventCount(song: Song): number {
 
 function displayTempo(song: Song): number {
   return song.master.tempoEvents.at(-1)?.tempo ?? 120;
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function shouldWarnBeforeReplacingMml(currentMml: string, lastExportedMml: string | null): boolean {

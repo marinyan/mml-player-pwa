@@ -5,10 +5,14 @@ const slurAttackSec = 0.001;
 const releaseSec = 0.025;
 const connectedReleaseSec = 0.006;
 
+type SynthAudioContext = BaseAudioContext & {
+  destination: AudioNode;
+};
+
 export class Synth {
   private masterGain: GainNode;
 
-  constructor(private readonly audioContext: AudioContext) {
+  constructor(private readonly audioContext: SynthAudioContext) {
     this.masterGain = audioContext.createGain();
     this.masterGain.gain.value = 0.75;
     this.masterGain.connect(audioContext.destination);
