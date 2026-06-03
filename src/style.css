@@ -26,6 +26,16 @@ textarea {
   font: inherit;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .app-shell {
   width: min(960px, 100%);
   min-height: 100vh;
@@ -41,6 +51,12 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 h1 {
@@ -71,6 +87,50 @@ p {
 .badge.offline {
   color: #ffe0a4;
   background: #3a2c16;
+}
+
+.file-menu {
+  position: relative;
+}
+
+.file-menu summary {
+  min-width: 64px;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid #465367;
+  border-radius: 8px;
+  color: #edf2f7;
+  background: #202733;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+  text-align: center;
+}
+
+.file-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.file-menu-panel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(220px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid #354152;
+  border-radius: 8px;
+  background: #171c23;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 8px;
+}
+
+.file-menu-panel button {
+  width: 100%;
+  min-height: 42px;
+  text-align: left;
+  padding: 0 12px;
 }
 
 .editor-panel {

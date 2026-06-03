@@ -13,8 +13,19 @@ export function mountApp(root: HTMLElement): void {
           <h1>MML Player</h1>
           <p>Offline PWA for iPhone Safari</p>
         </div>
-        <span id="offlineBadge" class="badge">checking</span>
+        <div class="topbar-actions">
+          <details id="fileMenu" class="file-menu">
+            <summary>File</summary>
+            <div class="file-menu-panel">
+              <button id="importButton" type="button">Import txt/mml</button>
+              <button id="exportButton" type="button">Export mml</button>
+            </div>
+          </details>
+          <span id="offlineBadge" class="badge">checking</span>
+        </div>
       </header>
+
+      <input id="fileInput" class="visually-hidden" type="file" accept=".txt,.mml,text/plain" />
 
       <section class="editor-panel">
         <label class="editor-label" for="mmlInput">MML</label>
@@ -47,6 +58,10 @@ export function mountApp(root: HTMLElement): void {
   `;
 
   const input = getElement<HTMLTextAreaElement>("mmlInput");
+  const fileMenu = getElement<HTMLDetailsElement>("fileMenu");
+  const fileInput = getElement<HTMLInputElement>("fileInput");
+  const importButton = getElement<HTMLButtonElement>("importButton");
+  const exportButton = getElement<HTMLButtonElement>("exportButton");
   const playButton = getElement<HTMLButtonElement>("playButton");
   const stopButton = getElement<HTMLButtonElement>("stopButton");
   const rewindButton = getElement<HTMLButtonElement>("rewindButton");
@@ -98,6 +113,43 @@ export function mountApp(root: HTMLElement): void {
   input.addEventListener("input", () => {
     saveMml(input.value);
     compileCurrent();
+  });
+
+  importButton.addEventListener("click", () => {
+    fileMenu.open = false;
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = "";
+    if (!file) return;
+
+    void file.text().then((text) => {
+      input.value = text;
+      saveMml(text);
+      compileCurrent();
+      message.textContent = `Imported ${file.name}`;
+      message.classList.remove("error");
+    }).catch((error: unknown) => {
+      message.textContent = error instanceof Error ? error.message : "Import failed";
+      message.classList.add("error");
+    });
+  });
+
+  exportButton.addEventListener("click", () => {
+    fileMenu.open = false;
+    const blob = new Blob([input.value], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mml-player.mml";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message.textContent = "Exported current MML";
+    message.classList.remove("error");
   });
 
   playButton.addEventListener("click", () => {
