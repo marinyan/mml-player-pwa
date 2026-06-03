@@ -54,6 +54,12 @@ describe("compileMml", () => {
     expect(result.events.map((event) => event.timbre)).toEqual([1, 4, 5, 6]);
   });
 
+  it("ignores line comments", () => {
+    const result = compileMml("T120 L4 C // ignored D E\nD");
+    expect(result.events).toHaveLength(2);
+    expect(result.events.map((event) => event.startTimeSec)).toEqual([0, 0.5]);
+  });
+
   it("ties matching notes with &", () => {
     const result = compileMml("T120 L4 C&C");
     expect(result.events).toHaveLength(1);
@@ -80,5 +86,6 @@ describe("compileMml", () => {
 
   it("throws on invalid characters", () => {
     expect(() => compileMml("C X")).toThrow(MmlError);
+    expect(() => compileMml("C / D")).toThrow(MmlError);
   });
 });
