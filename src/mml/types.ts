@@ -16,8 +16,32 @@ export interface TempoEvent {
   tempo: number;
 }
 
+export interface TimeSignatureEvent {
+  type: "setTimeSignature";
+  tick: number;
+  numerator: number;
+  denominator: number;
+  measureLengthTicks: number;
+}
+
+export interface MeasureBoundary {
+  tick: number;
+  explicit: boolean;
+  trackIndex?: number;
+}
+
+export interface Diagnostic {
+  severity: "warning";
+  position: number;
+  message: string;
+  trackIndex?: number;
+}
+
 export interface SongMaster {
   tempoEvents: TempoEvent[];
+  timeSignatureEvents: TimeSignatureEvent[];
+  measureBoundaries: MeasureBoundary[];
+  diagnostics: Diagnostic[];
 }
 
 export interface SongTrack {
@@ -39,6 +63,7 @@ export interface TrackState {
   gate: number;
   timbre: number;
   cursorSec: number;
+  cursorTicks: number;
 }
 
 export class MmlError extends Error {

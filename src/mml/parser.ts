@@ -9,6 +9,8 @@ export type MmlCommand =
   | { kind: "gate"; value: number; position: number }
   | { kind: "timbre"; value: number; position: number }
   | { kind: "connect"; position: number }
+  | { kind: "timeSignature"; numerator: number; denominator: number; position: number }
+  | { kind: "measureBoundary"; position: number }
   | { kind: "octaveShift"; delta: -1 | 1; position: number }
   | { kind: "note"; note: string; accidental: number; length: number | null; dotted: boolean; position: number }
   | { kind: "rest"; length: number | null; dotted: boolean; position: number };
@@ -55,6 +57,10 @@ class Parser {
     const token = this.consume();
     const value = token.value;
 
+    if (value === "#") {
+      return this.readDirective(token);
+    }
+
     if (commandLetters.has(value)) {
       const number = this.readRequiredNumber(token.position, `${value} requires a number`);
       if (value === "T") {
@@ -87,6 +93,10 @@ class Parser {
       return { kind: "connect", position: token.position };
     }
 
+    if (value === "|") {
+      return { kind: "measureBoundary", position: token.position };
+    }
+
     if (value === "<" || value === ">") {
       return { kind: "octaveShift", delta: value === ">" ? 1 : -1, position: token.position };
     }
@@ -100,6 +110,24 @@ class Parser {
     }
 
     throw new MmlError(token.position, `Unknown character "${token.value}"`);
+  }
+
+  private readDirective(token: MmlToken): MmlCommand {
+    this.readLiteral("TIME", token.position, "Unknown directive");
+    const numerator = this.readRequiredNumber(token.position, "#TIME requires a numerator");
+    const slash = this.consumeOrError(token.position, "#TIME requires n/d");
+    if (slash.value !== "/") {
+      throw new MmlError(slash.position, "#TIME requires n/d");
+    }
+    const denominator = this.readRequiredNumber(token.position, "#TIME requires a denominator");
+
+    if (numerator <= 0) throw new MmlError(token.position, "#TIME numerator must be greater than 0");
+    if (denominator <= 0) throw new MmlError(token.position, "#TIME denominator must be greater than 0");
+    if (![1, 2, 4, 8, 16].includes(denominator)) {
+      throw new MmlError(token.position, "#TIME denominator must be one of 1, 2, 4, 8, 16");
+    }
+
+    return { kind: "timeSignature", numerator, denominator, position: token.position };
   }
 
   private readNote(token: MmlToken): MmlCommand {
@@ -128,6 +156,15 @@ class Parser {
     const value = this.readOptionalNumber();
     if (value === null) throw new MmlError(position, message);
     return value;
+  }
+
+  private readLiteral(text: string, position: number, message: string): void {
+    for (const expected of text) {
+      const token = this.consumeOrError(position, message);
+      if (token.value !== expected) {
+        throw new MmlError(token.position, message);
+      }
+    }
   }
 
   private readOptionalNumber(): number | null {
@@ -162,6 +199,11 @@ class Parser {
     const token = this.peek();
     this.index += 1;
     return token;
+  }
+
+  private consumeOrError(position: number, message: string): MmlToken {
+    if (this.isEnd()) throw new MmlError(position, message);
+    return this.consume();
   }
 
   private isEnd(): boolean {

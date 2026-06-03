@@ -1,5 +1,17 @@
 import { parseMml, type MmlCommand } from "./parser";
-import { MmlError, type NoteEvent, type Song, type TempoEvent, type TrackState } from "./types";
+import {
+  MmlError,
+  type Diagnostic,
+  type MeasureBoundary,
+  type NoteEvent,
+  type Song,
+  type TempoEvent,
+  type TimeSignatureEvent,
+  type TrackState
+} from "./types";
+
+const ticksPerQuarter = 480;
+const defaultTimeSignature = { numerator: 4, denominator: 4 };
 
 const noteSemitones: Record<string, number> = {
   C: 0,
@@ -18,23 +30,48 @@ const initialState: TrackState = {
   volume: 12,
   gate: 8,
   timbre: 0,
-  cursorSec: 0
+  cursorSec: 0,
+  cursorTicks: 0
 };
 
 interface CompilerState extends TrackState {
   connectPending: boolean;
   lastNoteEvent: NoteEvent | null;
+  measureStartTick: number;
+  measureLengthTicks: number;
+  timeSignature: {
+    numerator: number;
+    denominator: number;
+  };
 }
 
 export function compileMml(source: string): Song {
   const ast = parseMml(source);
   const tracks = ast.tracks.map((_, trackIndex) => ({ trackIndex, events: [] as NoteEvent[] }));
   const tempoEvents: TempoEvent[] = [];
+  const timeSignatureEvents: TimeSignatureEvent[] = [
+    createTimeSignatureEvent(0, defaultTimeSignature.numerator, defaultTimeSignature.denominator)
+  ];
+  const measureBoundaries: MeasureBoundary[] = [];
+  const diagnostics: Diagnostic[] = [];
+  const explicitBoundaryTicks = new Map<number, number[]>();
 
   ast.tracks.forEach((track, trackIndex) => {
-    const state: CompilerState = { ...initialState, connectPending: false, lastNoteEvent: null };
+    const state: CompilerState = {
+      ...initialState,
+      connectPending: false,
+      lastNoteEvent: null,
+      measureStartTick: 0,
+      measureLengthTicks: measureLengthTicks(defaultTimeSignature.numerator, defaultTimeSignature.denominator),
+      timeSignature: { ...defaultTimeSignature }
+    };
     for (const command of track.commands) {
-      const event = applyCommand(command, state, trackIndex);
+      const event = applyCommand(command, state, trackIndex, {
+        diagnostics,
+        measureBoundaries,
+        timeSignatureEvents,
+        explicitBoundaryTicks
+      });
       if (command.kind === "tempo") {
         tempoEvents.push({ type: "setTempo", timeSec: state.cursorSec, tempo: command.value });
       }
@@ -45,13 +82,18 @@ export function compileMml(source: string): Song {
     }
   });
 
+  addMeasureAlignmentDiagnostics(explicitBoundaryTicks, diagnostics);
+
   for (const songTrack of tracks) {
     songTrack.events.sort((a, b) => a.startTimeSec - b.startTimeSec);
   }
 
   return {
     master: {
-      tempoEvents: tempoEvents.sort((a, b) => a.timeSec - b.timeSec)
+      tempoEvents: tempoEvents.sort((a, b) => a.timeSec - b.timeSec),
+      timeSignatureEvents: dedupeTimeSignatureEvents(timeSignatureEvents),
+      measureBoundaries: measureBoundaries.sort((a, b) => a.tick - b.tick || Number(b.explicit) - Number(a.explicit)),
+      diagnostics
     },
     tracks,
     durationSec: tracks.reduce(
@@ -62,7 +104,19 @@ export function compileMml(source: string): Song {
   };
 }
 
-function applyCommand(command: MmlCommand, state: CompilerState, trackIndex: number): NoteEvent | null {
+interface CompilerOutputs {
+  diagnostics: Diagnostic[];
+  measureBoundaries: MeasureBoundary[];
+  timeSignatureEvents: TimeSignatureEvent[];
+  explicitBoundaryTicks: Map<number, number[]>;
+}
+
+function applyCommand(
+  command: MmlCommand,
+  state: CompilerState,
+  trackIndex: number,
+  outputs: CompilerOutputs
+): NoteEvent | null {
   switch (command.kind) {
     case "tempo":
       state.tempo = command.value;
@@ -87,6 +141,12 @@ function applyCommand(command: MmlCommand, state: CompilerState, trackIndex: num
         throw new MmlError(command.position, "Tie/slur must follow a note");
       }
       state.connectPending = true;
+      return null;
+    case "timeSignature":
+      applyTimeSignature(command, state, trackIndex, outputs);
+      return null;
+    case "measureBoundary":
+      applyMeasureBoundary(command.position, state, trackIndex, outputs);
       return null;
     case "octaveShift":
       state.octave += command.delta;
@@ -150,6 +210,7 @@ function createTimedEvent(
   frequencyHz: number | null
 ): NoteEvent {
   const durationSec = noteDurationSec(lengthOverride ?? state.defaultLength, state.tempo, dotted);
+  const durationTicks = noteDurationTicks(lengthOverride ?? state.defaultLength, dotted);
   const gateDurationSec = frequencyHz === null ? 0 : durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
   const event: NoteEvent = {
     trackIndex,
@@ -163,6 +224,7 @@ function createTimedEvent(
     connectedToNext: false
   };
   state.cursorSec += durationSec;
+  state.cursorTicks += durationTicks;
   return event;
 }
 
@@ -173,6 +235,131 @@ function canTie(previous: NoteEvent, next: NoteEvent): boolean {
     previous.volume === next.volume &&
     previous.timbre === next.timbre
   );
+}
+
+function applyTimeSignature(
+  command: Extract<MmlCommand, { kind: "timeSignature" }>,
+  state: CompilerState,
+  trackIndex: number,
+  outputs: CompilerOutputs
+): void {
+  if (state.cursorTicks !== state.measureStartTick) {
+    outputs.diagnostics.push({
+      severity: "warning",
+      position: command.position,
+      trackIndex,
+      message: "小節途中の拍子変更: 現在位置を新しい小節境界として扱いました"
+    });
+    outputs.measureBoundaries.push({ tick: state.cursorTicks, explicit: false, trackIndex });
+    state.measureStartTick = state.cursorTicks;
+  }
+
+  state.timeSignature = {
+    numerator: command.numerator,
+    denominator: command.denominator
+  };
+  state.measureLengthTicks = measureLengthTicks(command.numerator, command.denominator);
+  outputs.timeSignatureEvents.push(createTimeSignatureEvent(state.cursorTicks, command.numerator, command.denominator));
+}
+
+function applyMeasureBoundary(
+  position: number,
+  state: CompilerState,
+  trackIndex: number,
+  outputs: CompilerOutputs
+): void {
+  const explicitTicks = outputs.explicitBoundaryTicks.get(trackIndex) ?? [];
+  explicitTicks.push(state.cursorTicks);
+  outputs.explicitBoundaryTicks.set(trackIndex, explicitTicks);
+
+  let elapsedTicks = state.cursorTicks - state.measureStartTick;
+  let insertedVirtualBoundary = false;
+
+  while (elapsedTicks > state.measureLengthTicks) {
+    const boundaryTick = state.measureStartTick + state.measureLengthTicks;
+    outputs.measureBoundaries.push({ tick: boundaryTick, explicit: false, trackIndex });
+    outputs.diagnostics.push({
+      severity: "warning",
+      position,
+      trackIndex,
+      message: `小節長超過: ${timeSignatureLabel(state)} の小節長を超えたため、仮想小節線を挿入しました`
+    });
+    state.measureStartTick = boundaryTick;
+    elapsedTicks = state.cursorTicks - state.measureStartTick;
+    insertedVirtualBoundary = true;
+  }
+
+  if (insertedVirtualBoundary) {
+    return;
+  }
+
+  if (elapsedTicks < state.measureLengthTicks) {
+    const missingTicks = state.measureLengthTicks - elapsedTicks;
+    advanceCursorByTicks(state, missingTicks);
+    outputs.diagnostics.push({
+      severity: "warning",
+      position,
+      trackIndex,
+      message: `小節長不足: ${timeSignatureLabel(state)} の小節に不足があるため、${missingTicks} ticks分の休符を補完しました`
+    });
+  }
+
+  outputs.measureBoundaries.push({ tick: state.cursorTicks, explicit: true, trackIndex });
+  state.measureStartTick = state.cursorTicks;
+}
+
+function advanceCursorByTicks(state: CompilerState, ticks: number): void {
+  state.cursorTicks += ticks;
+  state.cursorSec += (ticks / ticksPerQuarter) * (60 / state.tempo);
+}
+
+function measureLengthTicks(numerator: number, denominator: number): number {
+  return numerator * (4 / denominator) * ticksPerQuarter;
+}
+
+function createTimeSignatureEvent(tick: number, numerator: number, denominator: number): TimeSignatureEvent {
+  return {
+    type: "setTimeSignature",
+    tick,
+    numerator,
+    denominator,
+    measureLengthTicks: measureLengthTicks(numerator, denominator)
+  };
+}
+
+function dedupeTimeSignatureEvents(events: TimeSignatureEvent[]): TimeSignatureEvent[] {
+  const byTick = new Map<number, TimeSignatureEvent>();
+  for (const event of events) {
+    byTick.set(event.tick, event);
+  }
+  return [...byTick.values()].sort((a, b) => a.tick - b.tick);
+}
+
+function addMeasureAlignmentDiagnostics(explicitBoundaryTicks: Map<number, number[]>, diagnostics: Diagnostic[]): void {
+  if (explicitBoundaryTicks.size < 2) return;
+
+  const tracks = [...explicitBoundaryTicks.entries()].sort(([a], [b]) => a - b);
+  const maxBoundaryCount = Math.max(...tracks.map(([, ticks]) => ticks.length));
+
+  for (let index = 0; index < maxBoundaryCount; index += 1) {
+    const ticksAtIndex = tracks.map(([, ticks]) => ticks[index]).filter((tick): tick is number => tick !== undefined);
+    if (new Set(ticksAtIndex).size > 1) {
+      diagnostics.push({
+        severity: "warning",
+        position: 0,
+        message: "複数トラックの小節線位置が一致していません"
+      });
+    }
+  }
+}
+
+function noteDurationTicks(length: number, dotted: boolean): number {
+  const duration = ticksPerQuarter * (4 / length);
+  return dotted ? duration * 1.5 : duration;
+}
+
+function timeSignatureLabel(state: CompilerState): string {
+  return `${state.timeSignature.numerator}/${state.timeSignature.denominator}`;
 }
 
 export function noteDurationSec(length: number, tempo: number, dotted: boolean): number {

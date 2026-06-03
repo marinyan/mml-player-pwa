@@ -98,6 +98,85 @@ describe("compileMml", () => {
     expect(() => compileMml("C X")).toThrow(MmlError);
     expect(() => compileMml("C / D")).toThrow(MmlError);
   });
+
+  it("uses 4/4 as the default time signature", () => {
+    const result = compileMml("C");
+    expect(result.master.timeSignatureEvents).toEqual([
+      { type: "setTimeSignature", tick: 0, numerator: 4, denominator: 4, measureLengthTicks: 1920 }
+    ]);
+  });
+
+  it("compiles #TIME 3/4", () => {
+    const result = compileMml("#TIME 3/4 L4 C D E |");
+    expect(result.master.timeSignatureEvents).toEqual([
+      { type: "setTimeSignature", tick: 0, numerator: 3, denominator: 4, measureLengthTicks: 1440 }
+    ]);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1440, explicit: true, trackIndex: 0 });
+  });
+
+  it("compiles #TIME 6/8", () => {
+    const result = compileMml("#TIME 6/8 L8 C D E F G A |");
+    expect(result.master.timeSignatureEvents).toEqual([
+      { type: "setTimeSignature", tick: 0, numerator: 6, denominator: 8, measureLengthTicks: 1440 }
+    ]);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1440, explicit: true, trackIndex: 0 });
+  });
+
+  it("pads a short explicit measure internally", () => {
+    const result = compileMml("#TIME 4/4 T120 L4 C D E | G");
+    expect(events(result).map((event) => event.startTimeSec)).toEqual([0, 0.5, 1, 2]);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1920, explicit: true, trackIndex: 0 });
+    expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節長不足"))).toBe(true);
+  });
+
+  it("accepts an exact 4/4 measure", () => {
+    const result = compileMml("#TIME 4/4 L4 C D E F |");
+    expect(events(result)).toHaveLength(4);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1920, explicit: true, trackIndex: 0 });
+    expect(result.master.diagnostics).toEqual([]);
+  });
+
+  it("inserts a virtual measure boundary for an overfull measure", () => {
+    const result = compileMml("#TIME 4/4 L4 C D E F G |");
+    expect(events(result)).toHaveLength(5);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1920, explicit: false, trackIndex: 0 });
+    expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節長超過"))).toBe(true);
+  });
+
+  it("does not create NoteEvents from measure bars", () => {
+    const result = compileMml("L4 C | D");
+    expect(events(result)).toHaveLength(2);
+    expect(events(result).map((event) => event.frequencyHz === null)).toEqual([false, false]);
+  });
+
+  it("does not split notes that cross measure boundaries", () => {
+    const result = compileMml("#TIME 4/4 T120 L1 C. |");
+    expect(events(result)).toHaveLength(1);
+    expect(events(result)[0].durationSec).toBeCloseTo(3);
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1920, explicit: false, trackIndex: 0 });
+  });
+
+  it("throws positioned errors for invalid #TIME", () => {
+    for (const source of ["#TIME 4", "#TIME a/b", "#TIME 0/4", "#TIME 4/0", "#TIME 4/3"]) {
+      try {
+        compileMml(source);
+        throw new Error(`Expected ${source} to fail`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(MmlError);
+        expect((error as MmlError).position).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("does not warn when explicit measure bars align across tracks", () => {
+    const result = compileMml("L4 C D E F |, L4 C D E F |");
+    expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節線位置"))).toBe(false);
+  });
+
+  it("warns when explicit measure bars do not align across tracks", () => {
+    const result = compileMml("L4 C D |, L4 C D E F |");
+    expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節線位置"))).toBe(true);
+  });
 });
 
 function events(song: Song): NoteEvent[] {
