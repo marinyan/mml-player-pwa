@@ -55,7 +55,7 @@ C D E F G A B > C
 
 FM音色はWeb Audio APIのOscillatorNodeを使った軽量な2オペレータ風エミュレーションです。特定のFM音源チップとの完全互換ではありません。
 
-`@0` から `@15` は内蔵音色予約です。`@16` から `@63` はMML本文内の `%fm ... %end` ブロックで定義するユーザーFM音色として扱います。音色定義はlocalStorageではなくMML本文に含める方針なので、txt/mmlインポート・エクスポートで曲と一緒に持ち運べます。現時点では2op FMのみで、FM音色エディタUIは未実装です。
+`@0` から `@15` は内蔵音色予約です。`@16` から `@63` はMML本文内の `%fm ... %end` ブロックで定義するユーザーFM音色として扱います。音色定義はlocalStorageではなくMML本文に含める方針なので、txt/mmlインポート・エクスポートで曲と一緒に持ち運べます。現時点では2op/4op FMに対応し、FM音色エディタUIは未実装です。`algorithm=0` は `op4 -> op3 -> op2 -> op1` の直列として扱い、op3/op4を省略した場合は従来の2opとして扱います。
 
 ```mml
 %fm @16 name="Bell"
@@ -67,6 +67,20 @@ op2 ratio=2.00 detune=0 level=0.60 attack=0.01 decay=0.20 sustain=0.00 release=0
 
 T120 O4 L8
 @16 C D E G > C
+```
+
+```mml
+%fm @17 name="FourOpBell"
+algorithm=0
+feedback=3
+op1 ratio=1.00 detune=0 level=0.90 attack=0.01 decay=0.40 sustain=0.30 release=0.20
+op2 ratio=2.00 detune=0 level=0.50 attack=0.01 decay=0.30 sustain=0.20 release=0.15
+op3 ratio=3.00 detune=0 level=0.35 attack=0.01 decay=0.20 sustain=0.10 release=0.12
+op4 ratio=4.00 detune=0 level=0.25 attack=0.01 decay=0.15 sustain=0.00 release=0.10
+%end
+
+T120 O4 L8
+@17 C E G > C
 ```
 
 例:

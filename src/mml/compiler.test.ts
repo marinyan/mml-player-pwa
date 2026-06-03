@@ -10,6 +10,15 @@ op1 ratio=1.00 detune=0 level=1.00 attack=0.01 decay=0.30 sustain=0.40 release=0
 op2 ratio=2.00 detune=0 level=0.60 attack=0.01 decay=0.20 sustain=0.00 release=0.10
 %end`;
 
+const fourOpPatch = `%fm @17 name="FourOpBell"
+algorithm=0
+feedback=3
+op1 ratio=1.00 detune=0 level=0.90 attack=0.01 decay=0.40 sustain=0.30 release=0.20
+op2 ratio=2.00 detune=0 level=0.50 attack=0.01 decay=0.30 sustain=0.20 release=0.15
+op3 ratio=3.00 detune=0 level=0.35 attack=0.01 decay=0.20 sustain=0.10 release=0.12
+op4 ratio=4.00 detune=0 level=0.25 attack=0.01 decay=0.15 sustain=0.00 release=0.10
+%end`;
+
 describe("compileMml", () => {
   it("compiles tempo, octave, length and notes", () => {
     const result = compileMml("T120 O4 L4 C D E");
@@ -126,6 +135,14 @@ describe("compileMml", () => {
     expect(patch?.operators).toHaveLength(2);
   });
 
+  it("registers 4OP FM patches in the song registry", () => {
+    const result = compileMml(`${fourOpPatch}\nT120 @17 C`);
+    const patch = result.patches.userFmPatches.get(17);
+    expect(patch?.id).toBe(17);
+    expect(patch?.operators).toHaveLength(4);
+    expect(events(result).map((event) => event.timbre)).toEqual([17]);
+  });
+
   it("references defined FM patches from performance MML", () => {
     const result = compileMml(`${bellPatch}\n@16 C D E`);
     expect(events(result).map((event) => event.timbre)).toEqual([16, 16, 16]);
@@ -160,6 +177,10 @@ describe("compileMml", () => {
     expect(() => compileMml(bellPatch.replace("ratio=1.00", "ratio=0"))).toThrow(MmlError);
     expect(() => compileMml(bellPatch.replace("level=1.00", "level=2"))).toThrow(MmlError);
     expect(() => compileMml(bellPatch.replace("feedback=2", "feedback=8"))).toThrow(MmlError);
+  });
+
+  it("rejects incomplete 4OP FM patches", () => {
+    expect(() => compileMml(`${fourOpPatch.replace(/^op4 .+\n/m, "")}\n@17 C`)).toThrow(MmlError);
   });
 
   it("uses 4/4 as the default time signature", () => {

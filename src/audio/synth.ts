@@ -109,36 +109,39 @@ export class Synth {
 
   private scheduleUserFm(event: NoteEvent, patch: FmPatch, output: GainNode, startAt: number, endAt: number): void {
     if (event.frequencyHz === null) return;
+    const baseFrequencyHz = event.frequencyHz;
 
-    const carrierOp = patch.operators[0];
-    const modulatorOp = patch.operators[1];
-    const carrier = this.audioContext.createOscillator();
-    const modulator = this.audioContext.createOscillator();
-    const carrierGain = this.audioContext.createGain();
-    const modGain = this.audioContext.createGain();
+    const oscillators = patch.operators.map((operator) => {
+      const oscillator = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(baseFrequencyHz * operator.ratio + operator.detune, startAt);
+      oscillator.connect(gain);
+      return { oscillator, gain, operator };
+    });
 
-    carrier.type = "sine";
-    modulator.type = "sine";
-    carrier.frequency.setValueAtTime(event.frequencyHz * carrierOp.ratio + carrierOp.detune, startAt);
-    modulator.frequency.setValueAtTime(event.frequencyHz * modulatorOp.ratio + modulatorOp.detune, startAt);
+    const carrier = oscillators[0];
+    applyAdsr(carrier.gain.gain, carrier.operator, startAt, endAt);
+    carrier.gain.connect(output);
 
-    applyAdsr(carrierGain.gain, carrierOp, startAt, endAt);
-    applyAdsr(modGain.gain, modulatorOp, startAt, endAt, event.frequencyHz * (1 + patch.feedback * 0.12));
+    for (let index = 1; index < oscillators.length; index += 1) {
+      applyAdsr(oscillators[index].gain.gain, oscillators[index].operator, startAt, endAt, modulationScale(baseFrequencyHz, patch.feedback));
+      oscillators[index].gain.connect(oscillators[index - 1].oscillator.frequency);
+    }
 
-    modulator.connect(modGain);
-    modGain.connect(carrier.frequency);
-    carrier.connect(carrierGain);
-    carrierGain.connect(output);
-
-    carrier.start(startAt);
-    modulator.start(startAt);
-    carrier.stop(endAt + carrierOp.release + 0.01);
-    modulator.stop(endAt + modulatorOp.release + 0.01);
+    for (const voice of oscillators) {
+      voice.oscillator.start(startAt);
+      voice.oscillator.stop(endAt + voice.operator.release + 0.01);
+    }
   }
 
   disconnect(): void {
     this.masterGain.disconnect();
   }
+}
+
+function modulationScale(frequencyHz: number, feedback: number): number {
+  return frequencyHz * (1 + feedback * 0.12);
 }
 
 function applyAdsr(param: AudioParam, operator: FmOperator, startAt: number, endAt: number, scale = 1): void {

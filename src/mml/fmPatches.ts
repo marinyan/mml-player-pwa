@@ -99,7 +99,7 @@ function parsePatchBody(id: number, name: string, lines: SourceLine[]): FmPatch 
       continue;
     }
 
-    const opMatch = trimmed.match(/^op([12])\s+(.+)$/i);
+    const opMatch = trimmed.match(/^op([1-4])\s+(.+)$/i);
     if (opMatch) {
       const opIndex = Number(opMatch[1]);
       operators.set(opIndex, parseOperator(opMatch[2], line.start));
@@ -113,13 +113,18 @@ function parsePatchBody(id: number, name: string, lines: SourceLine[]): FmPatch 
   if (feedback === null) throw new MmlError(0, `FM patch @${id} requires feedback`);
   if (!operators.has(1)) throw new MmlError(0, `FM patch @${id} requires op1`);
   if (!operators.has(2)) throw new MmlError(0, `FM patch @${id} requires op2`);
+  if (operators.has(3) !== operators.has(4)) {
+    throw new MmlError(0, `FM patch @${id} requires both op3 and op4 for 4OP`);
+  }
 
   return {
     id,
     name,
     algorithm,
     feedback,
-    operators: [operators.get(1)!, operators.get(2)!]
+    operators: operators.has(3)
+      ? [operators.get(1)!, operators.get(2)!, operators.get(3)!, operators.get(4)!]
+      : [operators.get(1)!, operators.get(2)!]
   };
 }
 
