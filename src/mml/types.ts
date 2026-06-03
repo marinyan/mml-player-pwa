@@ -51,8 +51,37 @@ export interface SongTrack {
 
 export interface Song {
   master: SongMaster;
+  patches: PatchRegistry;
   tracks: SongTrack[];
   durationSec: number;
+}
+
+export interface BuiltinPatch {
+  id: number;
+  kind: "builtin";
+}
+
+export interface FmOperator {
+  ratio: number;
+  detune: number;
+  level: number;
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+}
+
+export interface FmPatch {
+  id: number;
+  name: string;
+  algorithm: number;
+  feedback: number;
+  operators: FmOperator[];
+}
+
+export interface PatchRegistry {
+  builtinPatches: Map<number, BuiltinPatch>;
+  userFmPatches: Map<number, FmPatch>;
 }
 
 export interface TrackState {

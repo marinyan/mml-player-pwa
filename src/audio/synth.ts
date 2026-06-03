@@ -1,4 +1,4 @@
-import type { NoteEvent } from "../mml/types";
+import type { FmOperator, FmPatch, NoteEvent, PatchRegistry } from "../mml/types";
 
 const attackSec = 0.008;
 const slurAttackSec = 0.001;
@@ -14,7 +14,7 @@ export class Synth {
     this.masterGain.connect(audioContext.destination);
   }
 
-  schedule(event: NoteEvent, startAt: number): void {
+  schedule(event: NoteEvent, startAt: number, patches: PatchRegistry): void {
     if (event.frequencyHz === null || event.gateDurationSec <= 0 || event.volume <= 0) {
       return;
     }
@@ -31,6 +31,12 @@ export class Synth {
     gain.gain.setValueAtTime(Math.max(peak, 0.0001), releaseStart);
     gain.gain.exponentialRampToValueAtTime(0.0001, envelopeEndAt);
     gain.connect(this.masterGain);
+
+    const userFmPatch = patches.userFmPatches.get(event.timbre);
+    if (userFmPatch) {
+      this.scheduleUserFm(event, userFmPatch, gain, startAt, envelopeEndAt);
+      return;
+    }
 
     if (event.timbre === 4 || event.timbre === 5) {
       this.scheduleFm(event, gain, startAt, envelopeEndAt);
@@ -101,9 +107,54 @@ export class Synth {
     source.stop(endAt + 0.01);
   }
 
+  private scheduleUserFm(event: NoteEvent, patch: FmPatch, output: GainNode, startAt: number, endAt: number): void {
+    if (event.frequencyHz === null) return;
+
+    const carrierOp = patch.operators[0];
+    const modulatorOp = patch.operators[1];
+    const carrier = this.audioContext.createOscillator();
+    const modulator = this.audioContext.createOscillator();
+    const carrierGain = this.audioContext.createGain();
+    const modGain = this.audioContext.createGain();
+
+    carrier.type = "sine";
+    modulator.type = "sine";
+    carrier.frequency.setValueAtTime(event.frequencyHz * carrierOp.ratio + carrierOp.detune, startAt);
+    modulator.frequency.setValueAtTime(event.frequencyHz * modulatorOp.ratio + modulatorOp.detune, startAt);
+
+    applyAdsr(carrierGain.gain, carrierOp, startAt, endAt);
+    applyAdsr(modGain.gain, modulatorOp, startAt, endAt, event.frequencyHz * (1 + patch.feedback * 0.12));
+
+    modulator.connect(modGain);
+    modGain.connect(carrier.frequency);
+    carrier.connect(carrierGain);
+    carrierGain.connect(output);
+
+    carrier.start(startAt);
+    modulator.start(startAt);
+    carrier.stop(endAt + carrierOp.release + 0.01);
+    modulator.stop(endAt + modulatorOp.release + 0.01);
+  }
+
   disconnect(): void {
     this.masterGain.disconnect();
   }
+}
+
+function applyAdsr(param: AudioParam, operator: FmOperator, startAt: number, endAt: number, scale = 1): void {
+  const peak = operator.level * scale;
+  const attackEnd = Math.min(startAt + Math.max(operator.attack, 0.001), endAt);
+  const decayEnd = Math.min(attackEnd + Math.max(operator.decay, 0.001), endAt);
+  const releaseEnd = endAt + operator.release;
+  const sustain = operator.sustain * peak;
+
+  param.setValueAtTime(0, startAt);
+  param.linearRampToValueAtTime(peak, attackEnd);
+  if (attackEnd < endAt) {
+    param.linearRampToValueAtTime(sustain, decayEnd);
+  }
+  param.setValueAtTime(attackEnd < endAt ? sustain : peak, endAt);
+  param.linearRampToValueAtTime(0, Math.max(releaseEnd, endAt + 0.001));
 }
 
 function oscillatorTypeForTimbre(timbre: number): OscillatorType {

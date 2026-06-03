@@ -1,6 +1,7 @@
 import { Scheduler, type PlaybackStatus } from "./audio/scheduler";
 import { compileMml } from "./mml/compiler";
 import { MmlError, type Song } from "./mml/types";
+import { createMmlTextBlob } from "./storage/fileText";
 import { loadSavedMml, saveMml } from "./storage/localStorage";
 
 const defaultMml = "T120 O4 L8 V12 Q7\nC D E F G A B > C";
@@ -139,7 +140,7 @@ export function mountApp(root: HTMLElement): void {
 
   exportButton.addEventListener("click", () => {
     fileMenu.open = false;
-    const blob = new Blob([input.value], { type: "text/plain;charset=utf-8" });
+    const blob = createMmlTextBlob(input.value);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

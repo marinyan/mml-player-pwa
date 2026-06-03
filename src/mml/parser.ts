@@ -85,7 +85,7 @@ class Parser {
 
     if (value === "@") {
       const number = this.readRequiredNumber(token.position, "@ requires a number");
-      if (number < 0 || number > 15) throw new MmlError(token.position, "Timbre must be 0-15");
+      if (number < 0 || number > 63) throw new MmlError(token.position, "Timbre must be 0-63");
       return { kind: "timbre", value: number, position: token.position };
     }
 

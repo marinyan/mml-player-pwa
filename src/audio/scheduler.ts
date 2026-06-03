@@ -70,7 +70,7 @@ export class Scheduler {
       events[this.nextEventIndex].startTimeSec <= playheadSec + horizonSec
     ) {
       const event = events[this.nextEventIndex];
-      this.synth.schedule(event, this.startAudioTime + event.startTimeSec);
+      this.synth.schedule(event, this.startAudioTime + event.startTimeSec, song.patches);
       this.nextEventIndex += 1;
     }
 

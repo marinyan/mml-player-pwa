@@ -53,6 +53,20 @@ C D E F G A B > C
 
 FM音色はWeb Audio APIのOscillatorNodeを使った軽量な2オペレータ風エミュレーションです。特定のFM音源チップとの完全互換ではありません。
 
+`@0` から `@15` は内蔵音色予約です。`@16` から `@63` はMML本文内の `%fm ... %end` ブロックで定義するユーザーFM音色として扱います。音色定義はlocalStorageではなくMML本文に含める方針なので、txt/mmlインポート・エクスポートで曲と一緒に持ち運べます。現時点では2op FMのみで、FM音色エディタUIは未実装です。
+
+```mml
+%fm @16 name="Bell"
+algorithm=0
+feedback=2
+op1 ratio=1.00 detune=0 level=1.00 attack=0.01 decay=0.30 sustain=0.40 release=0.20
+op2 ratio=2.00 detune=0 level=0.60 attack=0.01 decay=0.20 sustain=0.00 release=0.10
+%end
+
+T120 O4 L8
+@16 C D E G > C
+```
+
 例:
 
 ```mml

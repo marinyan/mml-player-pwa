@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { compileMml, noteFrequency } from "./compiler";
+import { extractFmPatches } from "./fmPatches";
 import { MmlError, type NoteEvent, type Song } from "./types";
+
+const bellPatch = `%fm @16 name="Bell"
+algorithm=0
+feedback=2
+op1 ratio=1.00 detune=0 level=1.00 attack=0.01 decay=0.30 sustain=0.40 release=0.20
+op2 ratio=2.00 detune=0 level=0.60 attack=0.01 decay=0.20 sustain=0.00 release=0.10
+%end`;
 
 describe("compileMml", () => {
   it("compiles tempo, octave, length and notes", () => {
@@ -97,6 +105,61 @@ describe("compileMml", () => {
   it("throws on invalid characters", () => {
     expect(() => compileMml("C X")).toThrow(MmlError);
     expect(() => compileMml("C / D")).toThrow(MmlError);
+  });
+
+  it("extracts FM patch blocks", () => {
+    const extracted = extractFmPatches(`${bellPatch}\nT120 @16 C`);
+    expect(extracted.patches.userFmPatches.get(16)?.name).toBe("Bell");
+  });
+
+  it("removes FM patch blocks from performance MML", () => {
+    const extracted = extractFmPatches(`${bellPatch}\nT120 @16 C`);
+    expect(extracted.mml).not.toContain("%fm");
+    expect(extracted.mml).not.toContain("algorithm=");
+    expect(extracted.mml).toContain("T120 @16 C");
+  });
+
+  it("registers FM patches in the song registry", () => {
+    const result = compileMml(`${bellPatch}\nT120 @16 C`);
+    const patch = result.patches.userFmPatches.get(16);
+    expect(patch?.id).toBe(16);
+    expect(patch?.operators).toHaveLength(2);
+  });
+
+  it("references defined FM patches from performance MML", () => {
+    const result = compileMml(`${bellPatch}\n@16 C D E`);
+    expect(events(result).map((event) => event.timbre)).toEqual([16, 16, 16]);
+  });
+
+  it("keeps builtin timbre references working", () => {
+    const result = compileMml("@0 C @4 D @15 E");
+    expect(events(result).map((event) => event.timbre)).toEqual([0, 4, 15]);
+  });
+
+  it("rejects redefining builtin timbres", () => {
+    expect(() => compileMml(bellPatch.replace("@16", "@0"))).toThrow(MmlError);
+  });
+
+  it("rejects FM patch ids outside @16-@63", () => {
+    expect(() => compileMml(bellPatch.replace("@16", "@64"))).toThrow(MmlError);
+  });
+
+  it("rejects duplicate FM patch ids", () => {
+    expect(() => compileMml(`${bellPatch}\n${bellPatch}`)).toThrow(MmlError);
+  });
+
+  it("rejects undefined user FM timbre references", () => {
+    expect(() => compileMml("@16 C")).toThrow(MmlError);
+  });
+
+  it("rejects FM patch blocks without %end", () => {
+    expect(() => compileMml(bellPatch.replace("%end", ""))).toThrow(MmlError);
+  });
+
+  it("rejects invalid FM patch parameter values", () => {
+    expect(() => compileMml(bellPatch.replace("ratio=1.00", "ratio=0"))).toThrow(MmlError);
+    expect(() => compileMml(bellPatch.replace("level=1.00", "level=2"))).toThrow(MmlError);
+    expect(() => compileMml(bellPatch.replace("feedback=2", "feedback=8"))).toThrow(MmlError);
   });
 
   it("uses 4/4 as the default time signature", () => {

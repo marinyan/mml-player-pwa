@@ -1,3 +1,4 @@
+import { extractFmPatches } from "./fmPatches";
 import { parseMml, type MmlCommand } from "./parser";
 import {
   MmlError,
@@ -46,7 +47,8 @@ interface CompilerState extends TrackState {
 }
 
 export function compileMml(source: string): Song {
-  const ast = parseMml(source);
+  const extracted = extractFmPatches(source);
+  const ast = parseMml(extracted.mml);
   const tracks = ast.tracks.map((_, trackIndex) => ({ trackIndex, events: [] as NoteEvent[] }));
   const tempoEvents: TempoEvent[] = [];
   const timeSignatureEvents: TimeSignatureEvent[] = [
@@ -70,7 +72,8 @@ export function compileMml(source: string): Song {
         diagnostics,
         measureBoundaries,
         timeSignatureEvents,
-        explicitBoundaryTicks
+        explicitBoundaryTicks,
+        userFmPatches: extracted.patches.userFmPatches
       });
       if (command.kind === "tempo") {
         tempoEvents.push({ type: "setTempo", timeSec: state.cursorSec, tempo: command.value });
@@ -95,6 +98,7 @@ export function compileMml(source: string): Song {
       measureBoundaries: measureBoundaries.sort((a, b) => a.tick - b.tick || Number(b.explicit) - Number(a.explicit)),
       diagnostics
     },
+    patches: extracted.patches,
     tracks,
     durationSec: tracks.reduce(
       (max, track) =>
@@ -109,6 +113,7 @@ interface CompilerOutputs {
   measureBoundaries: MeasureBoundary[];
   timeSignatureEvents: TimeSignatureEvent[];
   explicitBoundaryTicks: Map<number, number[]>;
+  userFmPatches: Map<number, unknown>;
 }
 
 function applyCommand(
@@ -134,6 +139,9 @@ function applyCommand(
       state.gate = command.value;
       return null;
     case "timbre":
+      if (command.value >= 16 && !outputs.userFmPatches.has(command.value)) {
+        throw new MmlError(command.position, `FM timbre @${command.value} is not defined`);
+      }
       state.timbre = command.value;
       return null;
     case "connect":
