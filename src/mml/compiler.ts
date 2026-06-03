@@ -1,5 +1,6 @@
 import { extractFmPatches } from "./fmPatches";
 import { parseMml, type MmlCommand } from "./parser";
+import { expandRepeats } from "./repeatExpander";
 import {
   MmlError,
   type Diagnostic,
@@ -48,7 +49,7 @@ interface CompilerState extends TrackState {
 
 export function compileMml(source: string): Song {
   const extracted = extractFmPatches(source);
-  const ast = parseMml(extracted.mml);
+  const ast = parseMml(expandRepeats(extracted.mml));
   const tracks = ast.tracks.map((_, trackIndex) => ({ trackIndex, events: [] as NoteEvent[] }));
   const tempoEvents: TempoEvent[] = [];
   const timeSignatureEvents: TimeSignatureEvent[] = [

@@ -1,4 +1,4 @@
-const cacheName = "mml-player-pwa-v9";
+const cacheName = "mml-player-pwa-v10";
 
 const shellFiles = [
   "./",
