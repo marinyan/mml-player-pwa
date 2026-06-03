@@ -60,12 +60,14 @@ describe("compileMml", () => {
     expect(result.events[0].durationSec).toBeCloseTo(1);
     expect(result.events[0].gateDurationSec).toBeCloseTo(1);
     expect(result.events[0].slurred).toBe(false);
+    expect(result.events[0].connectedToNext).toBe(false);
   });
 
   it("slurs different notes with &", () => {
     const result = compileMml("T120 L4 C&D");
     expect(result.events).toHaveLength(2);
     expect(result.events[0].gateDurationSec).toBeCloseTo(0.5);
+    expect(result.events[0].connectedToNext).toBe(true);
     expect(result.events[1].startTimeSec).toBeCloseTo(0.5);
     expect(result.events[1].slurred).toBe(true);
   });

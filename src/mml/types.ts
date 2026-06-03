@@ -7,6 +7,7 @@ export interface NoteEvent {
   volume: number;
   timbre: number;
   slurred: boolean;
+  connectedToNext: boolean;
 }
 
 export interface TrackState {

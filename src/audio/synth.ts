@@ -3,6 +3,7 @@ import type { NoteEvent } from "../mml/types";
 const attackSec = 0.008;
 const slurAttackSec = 0.001;
 const releaseSec = 0.025;
+const connectedReleaseSec = 0.006;
 
 export class Synth {
   private masterGain: GainNode;
@@ -20,23 +21,24 @@ export class Synth {
 
     const gain = this.audioContext.createGain();
     const endAt = startAt + event.gateDurationSec;
+    const envelopeEndAt = event.connectedToNext ? endAt + connectedReleaseSec : endAt;
     const noteAttackSec = event.slurred ? slurAttackSec : attackSec;
-    const releaseStart = Math.max(startAt + noteAttackSec, endAt - releaseSec);
+    const releaseStart = event.connectedToNext ? endAt : Math.max(startAt + noteAttackSec, endAt - releaseSec);
     const peak = Math.min(Math.max(event.volume, 0), 1);
 
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0001), startAt + noteAttackSec);
     gain.gain.setValueAtTime(Math.max(peak, 0.0001), releaseStart);
-    gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+    gain.gain.exponentialRampToValueAtTime(0.0001, envelopeEndAt);
     gain.connect(this.masterGain);
 
     if (event.timbre === 4 || event.timbre === 5) {
-      this.scheduleFm(event, gain, startAt, endAt);
+      this.scheduleFm(event, gain, startAt, envelopeEndAt);
       return;
     }
 
     if (event.timbre === 6) {
-      this.scheduleNoise(event, gain, startAt, endAt);
+      this.scheduleNoise(event, gain, startAt, envelopeEndAt);
       return;
     }
 
@@ -46,7 +48,7 @@ export class Synth {
 
     oscillator.connect(gain);
     oscillator.start(startAt);
-    oscillator.stop(endAt + 0.01);
+    oscillator.stop(envelopeEndAt + 0.01);
   }
 
   private scheduleFm(event: NoteEvent, output: GainNode, startAt: number, endAt: number): void {

@@ -125,6 +125,7 @@ function createNoteEvent(
   }
 
   previous.gateDurationSec = previous.durationSec;
+  previous.connectedToNext = true;
   event.gateDurationSec = event.durationSec;
   event.slurred = true;
   state.lastNoteEvent = event;
@@ -148,7 +149,8 @@ function createTimedEvent(
     frequencyHz,
     volume: state.volume / 15,
     timbre: state.timbre,
-    slurred: false
+    slurred: false,
+    connectedToNext: false
   };
   state.cursorSec += durationSec;
   return event;
