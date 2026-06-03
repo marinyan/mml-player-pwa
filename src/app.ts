@@ -2,7 +2,7 @@ import { Scheduler, type PlaybackStatus } from "./audio/scheduler";
 import { compileMml } from "./mml/compiler";
 import { MmlError, type Song } from "./mml/types";
 import { createMmlTextBlob } from "./storage/fileText";
-import { loadSavedMml, saveMml } from "./storage/localStorage";
+import { loadLastExportedMml, loadSavedMml, saveLastExportedMml, saveMml } from "./storage/localStorage";
 
 const defaultMml = `%fm @16 name="GlassBell"
 algorithm=0
@@ -55,6 +55,7 @@ export function mountApp(root: HTMLElement): void {
           <details id="fileMenu" class="file-menu">
             <summary>File</summary>
             <div class="file-menu-panel">
+              <button id="loadDemoButton" type="button">Load demo song</button>
               <button id="importButton" type="button">Import txt/mml</button>
               <button id="exportButton" type="button">Export mml</button>
             </div>
@@ -98,6 +99,7 @@ export function mountApp(root: HTMLElement): void {
   const input = getElement<HTMLTextAreaElement>("mmlInput");
   const fileMenu = getElement<HTMLDetailsElement>("fileMenu");
   const fileInput = getElement<HTMLInputElement>("fileInput");
+  const loadDemoButton = getElement<HTMLButtonElement>("loadDemoButton");
   const importButton = getElement<HTMLButtonElement>("importButton");
   const exportButton = getElement<HTMLButtonElement>("exportButton");
   const playButton = getElement<HTMLButtonElement>("playButton");
@@ -111,6 +113,7 @@ export function mountApp(root: HTMLElement): void {
 
   input.value = loadSavedMml(defaultMml);
   let compiled: Song | null = null;
+  let lastExportedMml = loadLastExportedMml();
 
   const scheduler = new Scheduler({
     onStatusChange: (status) => {
@@ -153,8 +156,19 @@ export function mountApp(root: HTMLElement): void {
     compileCurrent();
   });
 
+  loadDemoButton.addEventListener("click", () => {
+    fileMenu.open = false;
+    if (!confirmBeforeReplacingMml(input.value, lastExportedMml)) return;
+    input.value = defaultMml;
+    saveMml(input.value);
+    compileCurrent();
+    message.textContent = "Loaded demo song";
+    message.classList.remove("error");
+  });
+
   importButton.addEventListener("click", () => {
     fileMenu.open = false;
+    if (!confirmBeforeReplacingMml(input.value, lastExportedMml)) return;
     fileInput.click();
   });
 
@@ -186,6 +200,8 @@ export function mountApp(root: HTMLElement): void {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    lastExportedMml = input.value;
+    saveLastExportedMml(input.value);
     message.textContent = "Exported current MML";
     message.classList.remove("error");
   });
@@ -239,4 +255,12 @@ function eventCount(song: Song): number {
 
 function displayTempo(song: Song): number {
   return song.master.tempoEvents.at(-1)?.tempo ?? 120;
+}
+
+function confirmBeforeReplacingMml(currentMml: string, lastExportedMml: string | null): boolean {
+  if (currentMml === defaultMml || currentMml === lastExportedMml) return true;
+  return window.confirm(
+    "現在のMMLは未エクスポート、または最後のエクスポート後に変更されています。\n" +
+      "このまま読み込むと現在のエディタ内容が置き換わります。続行しますか？"
+  );
 }
