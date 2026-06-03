@@ -4,7 +4,7 @@ import { MmlError, type Song } from "./mml/types";
 import { createMmlTextBlob } from "./storage/fileText";
 import { loadLastExportedMml, loadSavedMml, saveLastExportedMml, saveMml } from "./storage/localStorage";
 
-const defaultMml = `%fm @16 name="GlassBell"
+export const defaultMml = `%fm @16 name="GlassBell"
 algorithm=0
 feedback=2
 op1 ratio=1.00 detune=0 level=0.90 attack=0.01 decay=0.35 sustain=0.35 release=0.18
@@ -158,7 +158,7 @@ export function mountApp(root: HTMLElement): void {
 
   loadDemoButton.addEventListener("click", () => {
     fileMenu.open = false;
-    if (!confirmBeforeReplacingMml(input.value, lastExportedMml)) return;
+    if (!confirmBeforeReplacingMml(input.value, lastExportedMml, window.confirm)) return;
     input.value = defaultMml;
     saveMml(input.value);
     compileCurrent();
@@ -168,7 +168,7 @@ export function mountApp(root: HTMLElement): void {
 
   importButton.addEventListener("click", () => {
     fileMenu.open = false;
-    if (!confirmBeforeReplacingMml(input.value, lastExportedMml)) return;
+    if (!confirmBeforeReplacingMml(input.value, lastExportedMml, window.confirm)) return;
     fileInput.click();
   });
 
@@ -257,9 +257,17 @@ function displayTempo(song: Song): number {
   return song.master.tempoEvents.at(-1)?.tempo ?? 120;
 }
 
-function confirmBeforeReplacingMml(currentMml: string, lastExportedMml: string | null): boolean {
-  if (currentMml === defaultMml || currentMml === lastExportedMml) return true;
-  return window.confirm(
+export function shouldWarnBeforeReplacingMml(currentMml: string, lastExportedMml: string | null): boolean {
+  return currentMml !== defaultMml && currentMml !== lastExportedMml;
+}
+
+export function confirmBeforeReplacingMml(
+  currentMml: string,
+  lastExportedMml: string | null,
+  confirm: (message: string) => boolean
+): boolean {
+  if (!shouldWarnBeforeReplacingMml(currentMml, lastExportedMml)) return true;
+  return confirm(
     "現在のMMLは未エクスポート、または最後のエクスポート後に変更されています。\n" +
       "このまま読み込むと現在のエディタ内容が置き換わります。続行しますか？"
   );
