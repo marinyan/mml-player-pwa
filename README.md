@@ -15,7 +15,7 @@ https://marinyan.github.io/mml-player-pwa/
 - MMLテキストの入力、再生、停止、先頭に戻る
 - `localStorage` によるMMLの自動保存と復元
 - txt/mmlのインポート、エクスポート
-- WAVエクスポート
+- ステレオWAVエクスポート
 - 複数トラックの同時再生
 - 2OP/4OP FM音色定義を含むMML本文
 - GM音源風プリセット `@gm1` から `@gm128`
@@ -49,10 +49,12 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 
 `Export WAV` は現在エディタにあるMMLを `mml-export.wav` として保存します。
 
-- 出力形式: 44.1kHz / 16bit PCM / mono RIFF/WAVE
+- 出力形式: 44.1kHz / 16bit PCM / stereo RIFF/WAVE
 - レンダリング方式: `OfflineAudioContext`
 - 音源処理: リアルタイム再生と同じ `Synth`
 - 反映される内容: `%fm ... %end`、2OP/4OP FM、内蔵音色、複数トラック、リピート展開、拍子/小節線の内部補正
+
+WAVは現在ステレオで出力します。内部の発音イベントには将来の5.1ch対応を見越して最大6チャンネル分の出力ゲインを保持していますが、現時点のUIとWAV書き出しでは左右2チャンネルを使います。
 
 長い曲ではWAVファイルが大きくなります。推定サイズが大きい場合は確認ダイアログを出します。
 
@@ -71,6 +73,7 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 | `.` | 付点 |
 | `<` / `>` | オクターブ上下 |
 | `V<number>` | 音量 0-15 |
+| `P<number>` | パン 0-127。`P0` が左、`P64` が中央、`P127` が右 |
 | `Q<number>` | ゲートタイム 1-8 |
 | `@<number>` | 内蔵音色またはMML内FM音色への変更 |
 | `@gm<number>` | GM音源風プリセットへの変更。例 `@gm1`、`@gm81` |

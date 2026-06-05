@@ -5,11 +5,15 @@ export interface NoteEvent {
   gateDurationSec: number;
   frequencyHz: number | null;
   volume: number;
+  pan: number;
+  outputChannelGains: OutputChannelGains;
   timbre: number;
   gmProgram: number | null;
   slurred: boolean;
   connectedToNext: boolean;
 }
+
+export type OutputChannelGains = [number, number, number, number, number, number];
 
 export interface TempoEvent {
   type: "setTempo";
@@ -99,6 +103,8 @@ export interface TrackState {
   octave: number;
   defaultLength: number;
   volume: number;
+  pan: number;
+  outputChannelGains: OutputChannelGains;
   gate: number;
   timbre: number;
   gmProgram: number | null;

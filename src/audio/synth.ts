@@ -9,12 +9,21 @@ type SynthAudioContext = BaseAudioContext & {
   destination: AudioNode;
 };
 
+interface SynthOptions {
+  outputChannels?: number;
+}
+
 export class Synth {
   private masterGain: GainNode;
+  private readonly outputChannels: number;
+  private readonly merger: ChannelMergerNode | null;
 
-  constructor(private readonly audioContext: SynthAudioContext) {
+  constructor(private readonly audioContext: SynthAudioContext, options: SynthOptions = {}) {
+    this.outputChannels = Math.min(Math.max(options.outputChannels ?? 2, 1), 6);
     this.masterGain = audioContext.createGain();
     this.masterGain.gain.value = 0.75;
+    this.merger = this.outputChannels > 1 ? audioContext.createChannelMerger(this.outputChannels) : null;
+    this.merger?.connect(this.masterGain);
     this.masterGain.connect(audioContext.destination);
   }
 
@@ -34,7 +43,7 @@ export class Synth {
     gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0001), startAt + noteAttackSec);
     gain.gain.setValueAtTime(Math.max(peak, 0.0001), releaseStart);
     gain.gain.exponentialRampToValueAtTime(0.0001, envelopeEndAt);
-    gain.connect(this.masterGain);
+    this.connectOutput(gain, event);
 
     const gmPatch = event.gmProgram === null ? undefined : patches.gmPatches.get(event.gmProgram);
     if (gmPatch?.fmPatch) {
@@ -147,7 +156,22 @@ export class Synth {
   }
 
   disconnect(): void {
+    this.merger?.disconnect();
     this.masterGain.disconnect();
+  }
+
+  private connectOutput(source: AudioNode, event: NoteEvent): void {
+    if (!this.merger || this.outputChannels === 1) {
+      source.connect(this.masterGain);
+      return;
+    }
+
+    for (let channel = 0; channel < this.outputChannels; channel += 1) {
+      const channelGain = this.audioContext.createGain();
+      channelGain.gain.value = event.outputChannelGains[channel] ?? 0;
+      source.connect(channelGain);
+      channelGain.connect(this.merger, 0, channel);
+    }
   }
 }
 

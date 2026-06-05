@@ -30,6 +30,8 @@ const initialState: TrackState = {
   octave: 4,
   defaultLength: 4,
   volume: 12,
+  pan: 64,
+  outputChannelGains: panToOutputChannelGains(64),
   gate: 8,
   timbre: 0,
   gmProgram: null,
@@ -137,6 +139,10 @@ function applyCommand(
     case "volume":
       state.volume = command.value;
       return null;
+    case "pan":
+      state.pan = command.value;
+      state.outputChannelGains = panToOutputChannelGains(command.value);
+      return null;
     case "gate":
       state.gate = command.value;
       return null;
@@ -233,6 +239,8 @@ function createTimedEvent(
     gateDurationSec,
     frequencyHz,
     volume: state.volume / 15,
+    pan: state.pan,
+    outputChannelGains: state.outputChannelGains,
     timbre: state.timbre,
     gmProgram: state.gmProgram,
     slurred: false,
@@ -248,6 +256,7 @@ function canTie(previous: NoteEvent, next: NoteEvent): boolean {
     previous.trackIndex === next.trackIndex &&
     previous.frequencyHz === next.frequencyHz &&
     previous.volume === next.volume &&
+    previous.pan === next.pan &&
     previous.timbre === next.timbre &&
     previous.gmProgram === next.gmProgram
   );
@@ -387,4 +396,17 @@ export function noteDurationSec(length: number, tempo: number, dotted: boolean):
 export function noteFrequency(note: string, octave: number, accidental: number): number {
   const midiNumber = (octave + 1) * 12 + noteSemitones[note] + accidental;
   return 440 * 2 ** ((midiNumber - 69) / 12);
+}
+
+export function panToOutputChannelGains(pan: number): [number, number, number, number, number, number] {
+  const normalized = Math.min(Math.max(pan, 0), 127) / 127;
+  const angle = normalized * Math.PI / 2;
+  return [
+    Math.cos(angle),
+    Math.sin(angle),
+    0,
+    0,
+    0,
+    0
+  ];
 }

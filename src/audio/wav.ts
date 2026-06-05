@@ -3,6 +3,8 @@ import { Synth } from "./synth";
 
 const defaultSampleRate = 44100;
 const defaultTailSec = 1;
+const defaultChannelCount = 2;
+const maxOutputChannels = 6;
 const wavHeaderBytes = 44;
 const pcm16BytesPerSample = 2;
 
@@ -16,11 +18,13 @@ export interface AudioBufferLike {
 export interface RenderSongToWavOptions {
   sampleRate?: number;
   tailSec?: number;
-  renderAudio?: (song: Song, options: { sampleRate: number; durationSec: number }) => Promise<AudioBufferLike>;
+  channelCount?: number;
+  renderAudio?: (song: Song, options: { sampleRate: number; durationSec: number; channelCount: number }) => Promise<AudioBufferLike>;
 }
 
 export async function renderSongToWav(song: Song, options: RenderSongToWavOptions = {}): Promise<Blob> {
   const sampleRate = options.sampleRate ?? defaultSampleRate;
+  const channelCount = normalizeChannelCount(options.channelCount ?? defaultChannelCount);
   const durationSec = songAudioDurationSec(song, options.tailSec ?? defaultTailSec);
 
   if (durationSec <= 0) {
@@ -28,24 +32,39 @@ export async function renderSongToWav(song: Song, options: RenderSongToWavOption
   }
 
   const rendered = options.renderAudio
-    ? await options.renderAudio(song, { sampleRate, durationSec })
-    : await renderSongAudio(song, sampleRate, durationSec);
+    ? await options.renderAudio(song, { sampleRate, durationSec, channelCount })
+    : await renderSongAudio(song, sampleRate, durationSec, channelCount);
 
   return encodeAudioBufferToWav(rendered);
 }
 
-export function estimateWavBytes(song: Song, sampleRate = defaultSampleRate, tailSec = defaultTailSec): number {
+export function estimateWavBytes(
+  song: Song,
+  sampleRate = defaultSampleRate,
+  tailSec = defaultTailSec,
+  channelCount = defaultChannelCount
+): number {
   const durationSec = songAudioDurationSec(song, tailSec);
   if (durationSec <= 0) return 0;
-  return wavHeaderBytes + Math.ceil(durationSec * sampleRate) * pcm16BytesPerSample;
+  return wavHeaderBytes + Math.ceil(durationSec * sampleRate) * normalizeChannelCount(channelCount) * pcm16BytesPerSample;
 }
 
 export function encodeAudioBufferToWav(buffer: AudioBufferLike): Blob {
-  return encodePcm16Wav(mixToMono(buffer), buffer.sampleRate);
+  return encodePcm16Wav(readChannels(buffer), buffer.sampleRate);
 }
 
-export function encodePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
-  const dataBytes = samples.length * pcm16BytesPerSample;
+export function encodePcm16Wav(samples: Float32Array | Float32Array[], sampleRate: number): Blob {
+  const channels = Array.isArray(samples) ? samples : [samples];
+  const channelCount = channels.length;
+  const frameCount = channels[0]?.length ?? 0;
+  if (channelCount < 1 || channelCount > maxOutputChannels) {
+    throw new Error("WAV channel count must be 1-6");
+  }
+  if (!channels.every((channel) => channel.length === frameCount)) {
+    throw new Error("All WAV channels must have the same sample count");
+  }
+
+  const dataBytes = frameCount * channelCount * pcm16BytesPerSample;
   const bytes = new ArrayBuffer(wavHeaderBytes + dataBytes);
   const view = new DataView(bytes);
 
@@ -55,18 +74,21 @@ export function encodePcm16Wav(samples: Float32Array, sampleRate: number): Blob 
   writeAscii(view, 12, "fmt ");
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
+  view.setUint16(22, channelCount, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * pcm16BytesPerSample, true);
-  view.setUint16(32, pcm16BytesPerSample, true);
+  view.setUint32(28, sampleRate * channelCount * pcm16BytesPerSample, true);
+  view.setUint16(32, channelCount * pcm16BytesPerSample, true);
   view.setUint16(34, 16, true);
   writeAscii(view, 36, "data");
   view.setUint32(40, dataBytes, true);
 
-  for (let index = 0; index < samples.length; index += 1) {
-    const clipped = Math.min(1, Math.max(-1, samples[index]));
-    const value = clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
-    view.setInt16(wavHeaderBytes + index * pcm16BytesPerSample, value, true);
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    for (let channel = 0; channel < channelCount; channel += 1) {
+      const clipped = Math.min(1, Math.max(-1, channels[channel][frame]));
+      const value = clipped < 0 ? clipped * 0x8000 : clipped * 0x7fff;
+      const offset = wavHeaderBytes + (frame * channelCount + channel) * pcm16BytesPerSample;
+      view.setInt16(offset, value, true);
+    }
   }
 
   return new Blob([bytes], { type: "audio/wav" });
@@ -78,14 +100,14 @@ function songAudioDurationSec(song: Song, tailSec: number): number {
   return Math.max(...audibleEvents.map((event) => event.startTimeSec + event.durationSec)) + tailSec;
 }
 
-async function renderSongAudio(song: Song, sampleRate: number, durationSec: number): Promise<AudioBuffer> {
+async function renderSongAudio(song: Song, sampleRate: number, durationSec: number, channelCount: number): Promise<AudioBuffer> {
   if (typeof OfflineAudioContext === "undefined") {
     throw new Error("OfflineAudioContext is not available in this browser");
   }
 
   const frameCount = Math.max(1, Math.ceil(durationSec * sampleRate));
-  const context = new OfflineAudioContext(1, frameCount, sampleRate);
-  const synth = new Synth(context);
+  const context = new OfflineAudioContext(channelCount, frameCount, sampleRate);
+  const synth = new Synth(context, { outputChannels: channelCount });
 
   for (const event of flattenSongEvents(song)) {
     synth.schedule(event, event.startTimeSec, song.patches);
@@ -102,18 +124,13 @@ function flattenSongEvents(song: Song): NoteEvent[] {
     .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
 }
 
-function mixToMono(buffer: AudioBufferLike): Float32Array {
-  const mixed = new Float32Array(buffer.length);
-  const channelCount = Math.max(buffer.numberOfChannels, 1);
+function readChannels(buffer: AudioBufferLike): Float32Array[] {
+  const channelCount = normalizeChannelCount(buffer.numberOfChannels);
+  return Array.from({ length: channelCount }, (_, channel) => buffer.getChannelData(channel));
+}
 
-  for (let channel = 0; channel < channelCount; channel += 1) {
-    const data = buffer.getChannelData(channel);
-    for (let index = 0; index < buffer.length; index += 1) {
-      mixed[index] += data[index] / channelCount;
-    }
-  }
-
-  return mixed;
+function normalizeChannelCount(channelCount: number): number {
+  return Math.min(Math.max(Math.floor(channelCount), 1), maxOutputChannels);
 }
 
 function writeAscii(view: DataView, offset: number, text: string): void {

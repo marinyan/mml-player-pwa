@@ -37,6 +37,20 @@ describe("encodePcm16Wav", () => {
     expect(view.getInt16(46, true)).toBe(0);
     expect(view.getInt16(48, true)).toBe(32767);
   });
+
+  it("encodes stereo samples as interleaved 16bit PCM", async () => {
+    const blob = encodePcm16Wav([new Float32Array([0.25, 0.5]), new Float32Array([-0.25, -0.5])], 44100);
+    const view = new DataView(await blob.arrayBuffer());
+
+    expect(view.getUint16(22, true)).toBe(2);
+    expect(view.getUint32(28, true)).toBe(44100 * 2 * 2);
+    expect(view.getUint16(32, true)).toBe(4);
+    expect(view.getUint32(40, true)).toBe(8);
+    expect(view.getInt16(44, true)).toBeCloseTo(8191, 0);
+    expect(view.getInt16(46, true)).toBeCloseTo(-8192, 0);
+    expect(view.getInt16(48, true)).toBeCloseTo(16383, 0);
+    expect(view.getInt16(50, true)).toBeCloseTo(-16384, 0);
+  });
 });
 
 describe("renderSongToWav", () => {
@@ -48,7 +62,8 @@ describe("renderSongToWav", () => {
     const view = new DataView(await blob.arrayBuffer());
 
     expect(readAscii(view, 0, 4)).toBe("RIFF");
-    expect(renderAudio).toHaveBeenCalledWith(song, expect.objectContaining({ sampleRate: 8000 }));
+    expect(renderAudio).toHaveBeenCalledWith(song, expect.objectContaining({ sampleRate: 8000, channelCount: 2 }));
+    expect(view.getUint16(22, true)).toBe(2);
     expect(view.getUint32(24, true)).toBe(8000);
     expect(view.getUint32(40, true)).toBeGreaterThan(0);
   });
@@ -61,10 +76,10 @@ describe("renderSongToWav", () => {
 
   it("passes MML-defined FM patches through the WAV render path", async () => {
     const song = compileMml(`${fmPatch}\nT120 @16 C`);
-    const renderAudio = vi.fn(async (renderedSong: Song, options: { sampleRate: number; durationSec: number }) => {
+    const renderAudio = vi.fn(async (renderedSong: Song, options: { sampleRate: number; durationSec: number; channelCount: number }) => {
       expect(renderedSong.patches.userFmPatches.get(16)?.operators).toHaveLength(2);
       expect(renderedSong.tracks[0].events[0].timbre).toBe(16);
-      return new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate));
+      return new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate), options.channelCount);
     });
 
     const blob = await renderSongToWav(song, { sampleRate: 8000, renderAudio });
@@ -75,11 +90,11 @@ describe("renderSongToWav", () => {
 
   it("passes GM timbre references through the WAV render path", async () => {
     const song = compileMml("T120 @gm5 C @gm81 D");
-    const renderAudio = vi.fn(async (renderedSong: Song, options: { sampleRate: number; durationSec: number }) => {
+    const renderAudio = vi.fn(async (renderedSong: Song, options: { sampleRate: number; durationSec: number; channelCount: number }) => {
       expect(renderedSong.patches.gmPatches.get(5)?.fmPatch?.operators.length).toBeGreaterThanOrEqual(2);
       expect(renderedSong.patches.gmPatches.get(81)?.builtinTimbre).toBe(0);
       expect(renderedSong.tracks[0].events.map((event) => event.gmProgram)).toEqual([5, 81]);
-      return new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate));
+      return new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate), options.channelCount);
     });
 
     const blob = await renderSongToWav(song, { sampleRate: 8000, renderAudio });
@@ -102,12 +117,19 @@ describe("renderSongToWav", () => {
   it("estimates the 44.1kHz mono 16bit WAV size", () => {
     const song = compileMml("T120 O4 L4 C");
 
-    expect(estimateWavBytes(song, 44100, 1)).toBe(44 + Math.ceil(1.5 * 44100) * 2);
+    expect(estimateWavBytes(song, 44100, 1, 1)).toBe(44 + Math.ceil(1.5 * 44100) * 2);
+  });
+
+  it("estimates the default stereo 16bit WAV size", () => {
+    const song = compileMml("T120 O4 L4 C");
+
+    expect(estimateWavBytes(song, 44100, 1)).toBe(44 + Math.ceil(1.5 * 44100) * 2 * 2);
   });
 });
 
-function createRenderAudio(): (song: Song, options: { sampleRate: number; durationSec: number }) => Promise<AudioBufferLike> {
-  return async (_song, options) => new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate));
+function createRenderAudio(): (song: Song, options: { sampleRate: number; durationSec: number; channelCount: number }) => Promise<AudioBufferLike> {
+  return async (_song, options) =>
+    new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate), options.channelCount);
 }
 
 function readAscii(view: DataView, offset: number, length: number): string {
@@ -119,20 +141,23 @@ function readAscii(view: DataView, offset: number, length: number): string {
 }
 
 class TestAudioBuffer implements AudioBufferLike {
-  readonly numberOfChannels = 1;
-  private readonly data: Float32Array;
+  private readonly data: Float32Array[];
 
   constructor(
     readonly sampleRate: number,
-    readonly length: number
+    readonly length: number,
+    readonly numberOfChannels = 1
   ) {
-    this.data = new Float32Array(length);
-    for (let index = 0; index < length; index += 1) {
-      this.data[index] = Math.sin(index / 8) * 0.25;
-    }
+    this.data = Array.from({ length: numberOfChannels }, (_, channel) => {
+      const data = new Float32Array(length);
+      for (let index = 0; index < length; index += 1) {
+        data[index] = Math.sin(index / 8 + channel) * 0.25;
+      }
+      return data;
+    });
   }
 
-  getChannelData(): Float32Array {
-    return this.data;
+  getChannelData(channel: number): Float32Array {
+    return this.data[channel];
   }
 }

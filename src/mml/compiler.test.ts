@@ -81,6 +81,23 @@ describe("compileMml", () => {
     expect(events(result).map((event) => event.timbre)).toEqual([1, 4, 5, 6]);
   });
 
+  it("compiles pan changes into 6-channel output gains", () => {
+    const result = compileMml("P0 C P64 D P127 E");
+    const outputGains = events(result).map((event) => event.outputChannelGains);
+
+    expect(events(result).map((event) => event.pan)).toEqual([0, 64, 127]);
+    expect(outputGains[0]).toEqual([1, 0, 0, 0, 0, 0]);
+    expect(outputGains[1][0]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(outputGains[1][1]).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(outputGains[1].slice(2)).toEqual([0, 0, 0, 0]);
+    expect(outputGains[2][0]).toBeCloseTo(0);
+    expect(outputGains[2][1]).toBeCloseTo(1);
+  });
+
+  it("rejects pan outside 0-127", () => {
+    expect(() => compileMml("P128 C")).toThrow(MmlError);
+  });
+
   it("ignores line comments", () => {
     const result = compileMml("T120 L4 C // ignored D E\nD");
     expect(events(result)).toHaveLength(2);
@@ -103,6 +120,13 @@ describe("compileMml", () => {
     expect(events(result)[0].connectedToNext).toBe(true);
     expect(events(result)[1].startTimeSec).toBeCloseTo(0.5);
     expect(events(result)[1].slurred).toBe(true);
+  });
+
+  it("does not tie matching notes when pan changes", () => {
+    const result = compileMml("T120 L4 P0 C&P127 C");
+    expect(events(result)).toHaveLength(2);
+    expect(events(result).map((event) => event.pan)).toEqual([0, 127]);
+    expect(events(result)[0].connectedToNext).toBe(true);
   });
 
   it("throws when & is not between notes", () => {

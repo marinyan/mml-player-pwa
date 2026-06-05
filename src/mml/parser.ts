@@ -6,6 +6,7 @@ export type MmlCommand =
   | { kind: "octave"; value: number; position: number }
   | { kind: "defaultLength"; value: number; position: number }
   | { kind: "volume"; value: number; position: number }
+  | { kind: "pan"; value: number; position: number }
   | { kind: "gate"; value: number; position: number }
   | { kind: "timbre"; value: number; position: number }
   | { kind: "gmTimbre"; value: number; position: number }
@@ -24,7 +25,7 @@ export interface MmlAst {
   tracks: MmlTrack[];
 }
 
-const commandLetters = new Set(["T", "O", "L", "V", "Q"]);
+const commandLetters = new Set(["T", "O", "L", "V", "P", "Q"]);
 const noteLetters = new Set(["C", "D", "E", "F", "G", "A", "B"]);
 
 export function parseMml(source: string): MmlAst {
@@ -79,6 +80,10 @@ class Parser {
       if (value === "V") {
         if (number < 0 || number > 15) throw new MmlError(token.position, "Volume must be 0-15");
         return { kind: "volume", value: number, position: token.position };
+      }
+      if (value === "P") {
+        if (number < 0 || number > 127) throw new MmlError(token.position, "Pan must be 0-127");
+        return { kind: "pan", value: number, position: token.position };
       }
       if (number < 1 || number > 8) throw new MmlError(token.position, "Gate time must be 1-8");
       return { kind: "gate", value: number, position: token.position };
