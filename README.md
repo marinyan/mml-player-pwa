@@ -40,14 +40,14 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 | --- | --- |
 | `Load demo song` | 内蔵デモ曲をエディタに読み込みます |
 | `Import txt/mml` | txt/mmlファイルを読み込みます |
-| `Export mml` | 現在のMML本文をUTF-8テキストとして保存します |
-| `Export WAV` | 現在のMMLをWAV音声として保存します |
+| `Export mml` | ファイル名を指定して、現在のMML本文をUTF-8テキストとして保存します |
+| `Export WAV` | ファイル名を指定して、現在のMMLをWAV音声として保存します |
 
 `Export mml` だけが、MML本文の保存済み状態を更新します。`Export WAV` は音声ファイルの保存なので、未エクスポート/変更あり状態は解除しません。
 
 ## WAVエクスポート
 
-`Export WAV` は現在エディタにあるMMLを `mml-export.wav` として保存します。
+`Export WAV` は現在エディタにあるMMLをWAVとして保存します。保存前にファイル名を入力できます。
 
 - 出力形式: 44.1kHz / 16bit PCM / stereo RIFF/WAVE
 - レンダリング方式: `OfflineAudioContext`
