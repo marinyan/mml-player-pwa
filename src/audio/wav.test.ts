@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { defaultMml } from "../app";
+import { defaultMml } from "../demo/defaultMml";
 import { compileMml } from "../mml/compiler";
 import { type Song } from "../mml/types";
 import { encodePcm16Wav, estimateWavBytes, renderSongToWav, type AudioBufferLike } from "./wav";
