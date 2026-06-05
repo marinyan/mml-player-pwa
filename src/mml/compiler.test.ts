@@ -82,7 +82,7 @@ describe("compileMml", () => {
   });
 
   it("compiles pan changes into 6-channel output gains", () => {
-    const result = compileMml("P0 C P64 D P127 E");
+    const result = compileMml("P-1.0 C P0 D P+1.0 E");
     const outputGains = events(result).map((event) => event.outputChannelGains);
 
     expect(events(result).map((event) => event.pan)).toEqual([0, 64, 127]);
@@ -94,8 +94,9 @@ describe("compileMml", () => {
     expect(outputGains[2][1]).toBeCloseTo(1);
   });
 
-  it("rejects pan outside 0-127", () => {
-    expect(() => compileMml("P128 C")).toThrow(MmlError);
+  it("rejects pan outside -1.0 to +1.0", () => {
+    expect(() => compileMml("P+1.1 C")).toThrow(MmlError);
+    expect(() => compileMml("P-1.1 C")).toThrow(MmlError);
   });
 
   it("ignores line comments", () => {
@@ -123,7 +124,7 @@ describe("compileMml", () => {
   });
 
   it("does not tie matching notes when pan changes", () => {
-    const result = compileMml("T120 L4 P0 C&P127 C");
+    const result = compileMml("T120 L4 P-1.0 C&P+1.0 C");
     expect(events(result)).toHaveLength(2);
     expect(events(result).map((event) => event.pan)).toEqual([0, 127]);
     expect(events(result)[0].connectedToNext).toBe(true);

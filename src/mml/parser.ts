@@ -64,6 +64,11 @@ class Parser {
     }
 
     if (commandLetters.has(value)) {
+      if (value === "P") {
+        const pan = this.readRequiredPan(token.position);
+        return { kind: "pan", value: pan, position: token.position };
+      }
+
       const number = this.readRequiredNumber(token.position, `${value} requires a number`);
       if (value === "T") {
         if (number <= 0) throw new MmlError(token.position, "Tempo must be greater than 0");
@@ -80,10 +85,6 @@ class Parser {
       if (value === "V") {
         if (number < 0 || number > 15) throw new MmlError(token.position, "Volume must be 0-15");
         return { kind: "volume", value: number, position: token.position };
-      }
-      if (value === "P") {
-        if (number < 0 || number > 127) throw new MmlError(token.position, "Pan must be 0-127");
-        return { kind: "pan", value: number, position: token.position };
       }
       if (number < 1 || number > 8) throw new MmlError(token.position, "Gate time must be 1-8");
       return { kind: "gate", value: number, position: token.position };
@@ -172,6 +173,37 @@ class Parser {
     return value;
   }
 
+  private readRequiredPan(position: number): number {
+    let text = "";
+
+    if (this.peekOrNull()?.value === "+" || this.peekOrNull()?.value === "-") {
+      text += this.consume().value;
+    }
+
+    const integerDigits = this.readDigits();
+    text += integerDigits;
+
+    if (this.peekOrNull()?.value === ".") {
+      text += this.consume().value;
+      const fractionDigits = this.readDigits();
+      if (fractionDigits === "") {
+        throw new MmlError(position, "Pan must be -1.0 to +1.0");
+      }
+      text += fractionDigits;
+    }
+
+    if (integerDigits === "" || text === "+" || text === "-") {
+      throw new MmlError(position, "P requires a pan value");
+    }
+
+    const pan = Number(text);
+    if (!Number.isFinite(pan) || pan < -1 || pan > 1) {
+      throw new MmlError(position, "Pan must be -1.0 to +1.0");
+    }
+
+    return Math.round((pan + 1) * 63.5);
+  }
+
   private readLiteral(text: string, position: number, message: string): void {
     for (const expected of text) {
       const token = this.consumeOrError(position, message);
@@ -182,11 +214,16 @@ class Parser {
   }
 
   private readOptionalNumber(): number | null {
+    const text = this.readDigits();
+    return text === "" ? null : Number(text);
+  }
+
+  private readDigits(): string {
     let text = "";
     while (!this.isEnd() && /^\d$/.test(this.peek().value)) {
       text += this.consume().value;
     }
-    return text === "" ? null : Number(text);
+    return text;
   }
 
   private readOptionalDot(): boolean {
