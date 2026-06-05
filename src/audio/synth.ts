@@ -36,24 +36,31 @@ export class Synth {
     gain.gain.exponentialRampToValueAtTime(0.0001, envelopeEndAt);
     gain.connect(this.masterGain);
 
+    const gmPatch = event.gmProgram === null ? undefined : patches.gmPatches.get(event.gmProgram);
+    if (gmPatch?.fmPatch) {
+      this.scheduleUserFm(event, gmPatch.fmPatch, gain, startAt, envelopeEndAt);
+      return;
+    }
+    const eventTimbre = gmPatch?.builtinTimbre ?? event.timbre;
+
     const userFmPatch = patches.userFmPatches.get(event.timbre);
-    if (userFmPatch) {
+    if (!gmPatch && userFmPatch) {
       this.scheduleUserFm(event, userFmPatch, gain, startAt, envelopeEndAt);
       return;
     }
 
-    if (event.timbre === 4 || event.timbre === 5) {
-      this.scheduleFm(event, gain, startAt, envelopeEndAt);
+    if (eventTimbre === 4 || eventTimbre === 5) {
+      this.scheduleFm(event, eventTimbre, gain, startAt, envelopeEndAt);
       return;
     }
 
-    if (event.timbre === 6) {
+    if (eventTimbre === 6) {
       this.scheduleNoise(event, gain, startAt, envelopeEndAt);
       return;
     }
 
     const oscillator = this.audioContext.createOscillator();
-    oscillator.type = oscillatorTypeForTimbre(event.timbre);
+    oscillator.type = oscillatorTypeForTimbre(eventTimbre);
     oscillator.frequency.setValueAtTime(event.frequencyHz, startAt);
 
     oscillator.connect(gain);
@@ -61,13 +68,13 @@ export class Synth {
     oscillator.stop(envelopeEndAt + 0.01);
   }
 
-  private scheduleFm(event: NoteEvent, output: GainNode, startAt: number, endAt: number): void {
+  private scheduleFm(event: NoteEvent, timbre: number, output: GainNode, startAt: number, endAt: number): void {
     if (event.frequencyHz === null) return;
 
     const carrier = this.audioContext.createOscillator();
     const modulator = this.audioContext.createOscillator();
     const modGain = this.audioContext.createGain();
-    const isBass = event.timbre === 5;
+    const isBass = timbre === 5;
 
     carrier.type = isBass ? "triangle" : "sine";
     modulator.type = "sine";

@@ -8,6 +8,7 @@ export type MmlCommand =
   | { kind: "volume"; value: number; position: number }
   | { kind: "gate"; value: number; position: number }
   | { kind: "timbre"; value: number; position: number }
+  | { kind: "gmTimbre"; value: number; position: number }
   | { kind: "connect"; position: number }
   | { kind: "timeSignature"; numerator: number; denominator: number; position: number }
   | { kind: "measureBoundary"; position: number }
@@ -84,6 +85,14 @@ class Parser {
     }
 
     if (value === "@") {
+      if (this.peekOrNull()?.value === "G") {
+        this.index += 1;
+        const m = this.consumeOrError(token.position, "@gm requires a program number");
+        if (m.value !== "M") throw new MmlError(m.position, "@gm requires a program number");
+        const number = this.readRequiredNumber(token.position, "@gm requires a program number");
+        if (number < 1 || number > 128) throw new MmlError(token.position, "GM timbre must be 1-128");
+        return { kind: "gmTimbre", value: number, position: token.position };
+      }
       const number = this.readRequiredNumber(token.position, "@ requires a number");
       if (number < 0 || number > 63) throw new MmlError(token.position, "Timbre must be 0-63");
       return { kind: "timbre", value: number, position: token.position };

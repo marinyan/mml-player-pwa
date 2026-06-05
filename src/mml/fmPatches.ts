@@ -1,4 +1,5 @@
 import { MmlError, type FmOperator, type FmPatch, type PatchRegistry } from "./types";
+import { createGmPatches } from "./gmPatches";
 
 interface ExtractedFmPatches {
   mml: string;
@@ -65,7 +66,8 @@ export function extractFmPatches(source: string): ExtractedFmPatches {
     mml: strippedLines.join(""),
     patches: {
       builtinPatches: new Map(builtinPatchIds.map((id) => [id, { id, kind: "builtin" as const }])),
-      userFmPatches
+      userFmPatches,
+      gmPatches: createGmPatches()
     }
   };
 }

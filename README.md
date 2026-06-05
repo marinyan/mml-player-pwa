@@ -16,6 +16,7 @@ https://marinyan.github.io/mml-player-pwa/
 - WAVエクスポート
 - 複数トラックの同時再生
 - 2OP/4OP FM音色定義を含むMML本文
+- GM音源風プリセット `@gm1` から `@gm128`
 - リピート、拍子、小節線、タイ/スラー、コメント行
 - Service Worker + Cache Storageによる初回アクセス後のオフライン起動
 - UIから分離したMML parser/compilerとVitestテスト
@@ -69,7 +70,8 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 | `<` / `>` | オクターブ上下 |
 | `V<number>` | 音量 0-15 |
 | `Q<number>` | ゲートタイム 1-8 |
-| `@<number>` | 音色変更 |
+| `@<number>` | 内蔵音色またはMML内FM音色への変更 |
+| `@gm<number>` | GM音源風プリセットへの変更。例 `@gm1`、`@gm81` |
 | `&` | タイ / スラー。例 `C&C`、`C&D` |
 | `//` | 行コメント。`//` から行末までを無視 |
 | `,` | トラック区切り |
@@ -99,6 +101,8 @@ C D E F G A B > C
 
 現時点では2OP/4OP FMに対応しています。`algorithm=0` は `op4 -> op3 -> op2 -> op1` の直列として扱い、`op3`/`op4` を省略した場合は2OPとして扱います。特定のFM音源チップとの完全互換ではありません。FM音色エディタUIは未実装です。
 
+`@gm1` から `@gm128` はGM音源風プリセットです。GM音色番号を `NoteEvent` に保持しつつ、現在のWeb Audio再生では内蔵音色またはFM近似プリセットに変換して鳴らします。将来MIDI出力を追加する際は、このGM番号をそのままプログラム番号の基礎として使える想定です。GM音源の完全再現ではなく、FM/内蔵波形による近似です。
+
 2OP例:
 
 ```mml
@@ -127,6 +131,14 @@ op4 ratio=4.00 detune=0 level=0.25 attack=0.01 decay=0.15 sustain=0.00 release=0
 
 T120 O4 L8
 @17 C E G > C
+```
+
+GM音源風プリセット例:
+
+```mml
+T120 O4 L8
+@gm1 C E G > C
+@gm81 C D E G
 ```
 
 ## 拍子と小節線

@@ -73,6 +73,21 @@ describe("renderSongToWav", () => {
     expect(renderAudio).toHaveBeenCalledOnce();
   });
 
+  it("passes GM timbre references through the WAV render path", async () => {
+    const song = compileMml("T120 @gm5 C @gm81 D");
+    const renderAudio = vi.fn(async (renderedSong: Song, options: { sampleRate: number; durationSec: number }) => {
+      expect(renderedSong.patches.gmPatches.get(5)?.fmPatch?.operators.length).toBeGreaterThanOrEqual(2);
+      expect(renderedSong.patches.gmPatches.get(81)?.builtinTimbre).toBe(0);
+      expect(renderedSong.tracks[0].events.map((event) => event.gmProgram)).toEqual([5, 81]);
+      return new TestAudioBuffer(options.sampleRate, Math.ceil(options.durationSec * options.sampleRate));
+    });
+
+    const blob = await renderSongToWav(song, { sampleRate: 8000, renderAudio });
+
+    expect(blob.type).toBe("audio/wav");
+    expect(renderAudio).toHaveBeenCalledOnce();
+  });
+
   it("can export the bundled demo song through the WAV render path", async () => {
     const song = compileMml(defaultMml);
     const renderAudio = vi.fn(createRenderAudio());

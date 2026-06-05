@@ -32,6 +32,7 @@ const initialState: TrackState = {
   volume: 12,
   gate: 8,
   timbre: 0,
+  gmProgram: null,
   cursorSec: 0,
   cursorTicks: 0
 };
@@ -144,6 +145,10 @@ function applyCommand(
         throw new MmlError(command.position, `FM timbre @${command.value} is not defined`);
       }
       state.timbre = command.value;
+      state.gmProgram = null;
+      return null;
+    case "gmTimbre":
+      state.gmProgram = command.value;
       return null;
     case "connect":
       if (!state.lastNoteEvent || state.connectPending) {
@@ -229,6 +234,7 @@ function createTimedEvent(
     frequencyHz,
     volume: state.volume / 15,
     timbre: state.timbre,
+    gmProgram: state.gmProgram,
     slurred: false,
     connectedToNext: false
   };
@@ -242,7 +248,8 @@ function canTie(previous: NoteEvent, next: NoteEvent): boolean {
     previous.trackIndex === next.trackIndex &&
     previous.frequencyHz === next.frequencyHz &&
     previous.volume === next.volume &&
-    previous.timbre === next.timbre
+    previous.timbre === next.timbre &&
+    previous.gmProgram === next.gmProgram
   );
 }
 

@@ -151,6 +151,26 @@ describe("compileMml", () => {
   it("keeps builtin timbre references working", () => {
     const result = compileMml("@0 C @4 D @15 E");
     expect(events(result).map((event) => event.timbre)).toEqual([0, 4, 15]);
+    expect(events(result).map((event) => event.gmProgram)).toEqual([null, null, null]);
+  });
+
+  it("compiles GM timbre references", () => {
+    const result = compileMml("@gm1 C @GM81 D @gm128 E");
+    expect(result.patches.gmPatches).toHaveLength(128);
+    expect(result.patches.gmPatches.get(1)?.name).toBe("Acoustic Grand Piano");
+    expect(result.patches.gmPatches.get(81)?.builtinTimbre).toBe(0);
+    expect(events(result).map((event) => event.gmProgram)).toEqual([1, 81, 128]);
+  });
+
+  it("clears GM timbre when returning to legacy timbre numbers", () => {
+    const result = compileMml("@gm1 C @4 D");
+    expect(events(result).map((event) => event.gmProgram)).toEqual([1, null]);
+    expect(events(result).map((event) => event.timbre)).toEqual([0, 4]);
+  });
+
+  it("rejects GM timbres outside gm1-gm128", () => {
+    expect(() => compileMml("@gm0 C")).toThrow(MmlError);
+    expect(() => compileMml("@gm129 C")).toThrow(MmlError);
   });
 
   it("rejects redefining builtin timbres", () => {

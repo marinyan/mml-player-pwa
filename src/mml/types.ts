@@ -6,6 +6,7 @@ export interface NoteEvent {
   frequencyHz: number | null;
   volume: number;
   timbre: number;
+  gmProgram: number | null;
   slurred: boolean;
   connectedToNext: boolean;
 }
@@ -79,9 +80,18 @@ export interface FmPatch {
   operators: FmOperator[];
 }
 
+export interface GmPatch {
+  id: number;
+  name: string;
+  kind: "gm";
+  builtinTimbre: number;
+  fmPatch?: FmPatch;
+}
+
 export interface PatchRegistry {
   builtinPatches: Map<number, BuiltinPatch>;
   userFmPatches: Map<number, FmPatch>;
+  gmPatches: Map<number, GmPatch>;
 }
 
 export interface TrackState {
@@ -91,6 +101,7 @@ export interface TrackState {
   volume: number;
   gate: number;
   timbre: number;
+  gmProgram: number | null;
   cursorSec: number;
   cursorTicks: number;
 }
