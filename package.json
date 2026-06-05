@@ -2,6 +2,7 @@
   "name": "mml-player-pwa",
   "version": "0.1.0",
   "private": true,
+  "license": "BSD-2-Clause",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

@@ -2,6 +2,8 @@
 
 iPhone Safariで使える、オフライン対応のMMLプレイヤーPWAです。サーバー、DB、ログインなしの静的ファイルだけで動き、GitHub Pagesなどに配置できます。
 
+ライセンスは BSD-2-Clause です。
+
 公開URL:
 
 ```text
