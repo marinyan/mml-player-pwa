@@ -3,6 +3,7 @@ import { estimateWavBytes, renderSongToWav } from "./audio/wav";
 import { defaultMml } from "./demo/defaultMml";
 import { compileMml } from "./mml/compiler";
 import { MmlError, type Song } from "./mml/types";
+import { exportSongToSmf, gmTrackCount } from "./midi/smf";
 import { createMmlTextBlob } from "./storage/fileText";
 import { loadLastExportedMml, loadSavedMml, saveLastExportedMml, saveMml } from "./storage/localStorage";
 import { requestExportFileName } from "./ui/exportFile";
@@ -24,6 +25,7 @@ export function mountApp(root: HTMLElement): void {
               <button id="importButton" type="button">Import txt/mml</button>
               <button id="exportButton" type="button">Export mml</button>
               <button id="wavExportButton" type="button">Export WAV</button>
+              <button id="midiExportButton" type="button">Export MIDI</button>
             </div>
           </details>
           <span id="offlineBadge" class="badge">checking</span>
@@ -69,6 +71,7 @@ export function mountApp(root: HTMLElement): void {
   const importButton = getElement<HTMLButtonElement>("importButton");
   const exportButton = getElement<HTMLButtonElement>("exportButton");
   const wavExportButton = getElement<HTMLButtonElement>("wavExportButton");
+  const midiExportButton = getElement<HTMLButtonElement>("midiExportButton");
   const playButton = getElement<HTMLButtonElement>("playButton");
   const stopButton = getElement<HTMLButtonElement>("stopButton");
   const rewindButton = getElement<HTMLButtonElement>("rewindButton");
@@ -204,6 +207,30 @@ export function mountApp(root: HTMLElement): void {
       .finally(() => {
         wavExportButton.disabled = false;
       });
+  });
+
+  midiExportButton.addEventListener("click", () => {
+    fileMenu.open = false;
+    const song = compileCurrent();
+    if (!song) return;
+    if (gmTrackCount(song) === 0) {
+      message.textContent = "MIDI export requires at least one @gm note";
+      message.classList.add("error");
+      return;
+    }
+
+    const fileName = requestExportFileName("mml-export.mid", ".mid", window.prompt);
+    if (fileName === null) return;
+
+    try {
+      const blob = exportSongToSmf(song);
+      downloadBlob(blob, fileName);
+      message.textContent = `Exported ${fileName} (${gmTrackCount(song)} GM track(s))`;
+      message.classList.remove("error");
+    } catch (error) {
+      message.textContent = error instanceof Error ? error.message : "MIDI export failed";
+      message.classList.add("error");
+    }
   });
 
   playButton.addEventListener("click", () => {

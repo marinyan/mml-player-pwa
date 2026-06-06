@@ -16,6 +16,7 @@ https://marinyan.github.io/mml-player-pwa/
 - `localStorage` によるMMLの自動保存と復元
 - txt/mmlのインポート、エクスポート
 - ステレオWAVエクスポート
+- GM音色トラックのMIDI（SMF）エクスポート
 - 複数トラックの同時再生
 - 2OP/4OP FM音色定義を含むMML本文
 - GM音源風プリセット `@gm1` から `@gm128`
@@ -28,7 +29,7 @@ https://marinyan.github.io/mml-player-pwa/
 1. エディタにMMLを入力します。
 2. `Play` で再生します。
 3. `Stop` で停止、`Rewind` で先頭に戻ります。
-4. Fileメニューからtxt/mmlの読み書き、デモ曲ロード、WAV書き出しができます。
+4. Fileメニューからtxt/mmlの読み書き、デモ曲ロード、WAV/MIDI書き出しができます。
 
 iOS SafariではAudioContextの制約があるため、音声は必ず画面の `Play` ボタンを押した後に開始します。
 
@@ -42,8 +43,9 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 | `Import txt/mml` | txt/mmlファイルを読み込みます |
 | `Export mml` | ファイル名を指定して、現在のMML本文をUTF-8テキストとして保存します |
 | `Export WAV` | ファイル名を指定して、現在のMMLをWAV音声として保存します |
+| `Export MIDI` | ファイル名を指定して、GM音色を使うトラックをMIDIとして保存します |
 
-`Export mml` だけが、MML本文の保存済み状態を更新します。`Export WAV` は音声ファイルの保存なので、未エクスポート/変更あり状態は解除しません。
+`Export mml` だけが、MML本文の保存済み状態を更新します。`Export WAV` と `Export MIDI` はMML本文の未エクスポート/変更あり状態を解除しません。
 
 ## WAVエクスポート
 
@@ -57,6 +59,20 @@ iOS SafariではAudioContextの制約があるため、音声は必ず画面の 
 WAVは現在ステレオで出力します。内部の発音イベントには将来の5.1ch対応を見越して最大6チャンネル分の出力ゲインを保持していますが、現時点のUIとWAV書き出しでは左右2チャンネルを使います。
 
 長い曲ではWAVファイルが大きくなります。推定サイズが大きい場合は確認ダイアログを出します。
+
+## MIDIエクスポート
+
+`Export MIDI` はSMF Format 1のMIDIファイルを書き出します。
+
+- コンダクタートラックの先頭に `GM System On` を付与します
+- テンポと拍子をコンダクタートラックへ出力します
+- `@gm1` から `@gm128` が指定された音符だけを出力します
+- 内蔵音色 `@0`〜`@15` とMML内FM音色 `@16`〜`@63` の音符は出力しません
+- GM音色を含むMMLトラックは、それぞれ個別のSMFトラックとして出力します
+- 音量、パン、Program Change、Note On/Offを出力します
+- GM Channel 10は打楽器用として予約し、通常のGM音色トラックには割り当てません
+
+MIDIエクスポートしても、MML本文は保存済み扱いになりません。現時点ではドラム専用トラック、ピッチベンド、5.1ch情報のMIDI変換には対応していません。
 
 ## 対応MML
 
