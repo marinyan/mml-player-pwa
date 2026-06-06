@@ -306,6 +306,37 @@ describe("compileMml", () => {
     const result = compileMml("L4 C D |, L4 C D E F |");
     expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節線位置"))).toBe(true);
   });
+
+  it("compiles tuplets into an exact total length", () => {
+    const result = compileMml("T120 { C D E }4 G");
+    expect(events(result).map((event) => event.startTimeSec)).toEqual([0, 1 / 6, 1 / 3, 0.5]);
+    expect(events(result).slice(0, 3).map((event) => event.durationSec)).toEqual([1 / 6, 1 / 6, 1 / 6]);
+  });
+
+  it("supports rests and state changes inside tuplets", () => {
+    const result = compileMml("T120 { @1 C R @2 E }4");
+    expect(events(result).map((event) => event.timbre)).toEqual([1, 1, 2]);
+    expect(events(result)[1].frequencyHz).toBeNull();
+    expect(result.durationSec).toBeCloseTo(0.5);
+  });
+
+  it("supports dotted total tuplet lengths", () => {
+    const result = compileMml("T120 { C D E }4.");
+    expect(result.durationSec).toBeCloseTo(0.75);
+    expect(events(result)[0].durationSec).toBeCloseTo(0.25);
+  });
+
+  it("ignores individual note lengths and closes tuplets exactly", () => {
+    const result = compileMml("T120 { C1 D16 E8 F2 G32 }4 A");
+    expect(events(result).slice(0, 5).map((event) => event.durationSec)).toEqual([0.1, 0.1, 0.1, 0.1, 0.1]);
+    expect(events(result)[5].startTimeSec).toBeCloseTo(0.5);
+  });
+
+  it("rejects invalid tuplets", () => {
+    for (const source of ["{ C D E", "{ C D E }", "{ }4", "{ { C D E }4 }4", "{ C | D }4"]) {
+      expect(() => compileMml(source)).toThrow(MmlError);
+    }
+  });
 });
 
 function events(song: Song): NoteEvent[] {

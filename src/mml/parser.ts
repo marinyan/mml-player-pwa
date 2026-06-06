@@ -13,6 +13,7 @@ export type MmlCommand =
   | { kind: "connect"; position: number }
   | { kind: "timeSignature"; numerator: number; denominator: number; position: number }
   | { kind: "measureBoundary"; position: number }
+  | { kind: "tuplet"; commands: MmlCommand[]; length: number; dotted: boolean; position: number }
   | { kind: "octaveShift"; delta: -1 | 1; position: number }
   | { kind: "note"; note: string; accidental: number; length: number | null; dotted: boolean; position: number }
   | { kind: "rest"; length: number | null; dotted: boolean; position: number };
@@ -61,6 +62,10 @@ class Parser {
 
     if (value === "#") {
       return this.readDirective(token);
+    }
+
+    if (value === "{") {
+      return this.readTuplet(token);
     }
 
     if (commandLetters.has(value)) {
@@ -143,6 +148,26 @@ class Parser {
     }
 
     return { kind: "timeSignature", numerator, denominator, position: token.position };
+  }
+
+  private readTuplet(token: MmlToken): MmlCommand {
+    const commands: MmlCommand[] = [];
+    while (this.peekOrNull()?.value !== "}") {
+      if (this.isEnd()) throw new MmlError(token.position, "Tuplet requires }");
+      const command = this.readCommand();
+      if (command.kind === "tuplet") throw new MmlError(command.position, "Nested tuplets are not supported");
+      if (["tempo", "timeSignature", "measureBoundary"].includes(command.kind)) {
+        throw new MmlError(command.position, "Tuplets cannot contain tempo, time signature, or measure boundary commands");
+      }
+      commands.push(command);
+    }
+    this.index += 1;
+    const length = this.readRequiredNumber(token.position, "Tuplet requires a total length after }");
+    if (length <= 0) throw new MmlError(token.position, "Tuplet length must be greater than 0");
+    const dotted = this.readOptionalDot();
+    const timedCount = commands.filter((command) => command.kind === "note" || command.kind === "rest").length;
+    if (timedCount === 0) throw new MmlError(token.position, "Tuplet requires at least one note or rest");
+    return { kind: "tuplet", commands, length, dotted, position: token.position };
   }
 
   private readNote(token: MmlToken): MmlCommand {

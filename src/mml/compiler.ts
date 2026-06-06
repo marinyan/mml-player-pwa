@@ -72,6 +72,30 @@ export function compileMml(source: string): Song {
       timeSignature: { ...defaultTimeSignature }
     };
     for (const command of track.commands) {
+      if (command.kind === "tuplet") {
+        const timedCount = command.commands.filter((inner) => inner.kind === "note" || inner.kind === "rest").length;
+        const totalSec = noteDurationSec(command.length, state.tempo, command.dotted);
+        const totalTicks = noteDurationTicks(command.length, command.dotted);
+        let timedIndex = 0;
+        for (const inner of command.commands) {
+          const isTimed = inner.kind === "note" || inner.kind === "rest";
+          const event = applyCommand(inner, state, trackIndex, {
+            diagnostics,
+            measureBoundaries,
+            timeSignatureEvents,
+            explicitBoundaryTicks,
+            userFmPatches: extracted.patches.userFmPatches
+          }, isTimed ? {
+            durationSec: totalSec / timedCount,
+            durationTicks: timedIndex === timedCount - 1
+              ? totalTicks - (totalTicks / timedCount) * timedIndex
+              : totalTicks / timedCount
+          } : undefined);
+          if (isTimed) timedIndex += 1;
+          if (event) tracks[trackIndex].events.push(event);
+        }
+        continue;
+      }
       const event = applyCommand(command, state, trackIndex, {
         diagnostics,
         measureBoundaries,
@@ -124,7 +148,8 @@ function applyCommand(
   command: MmlCommand,
   state: CompilerState,
   trackIndex: number,
-  outputs: CompilerOutputs
+  outputs: CompilerOutputs,
+  timingOverride?: { durationSec: number; durationTicks: number }
 ): NoteEvent | null {
   switch (command.kind) {
     case "tempo":
@@ -168,6 +193,8 @@ function applyCommand(
     case "measureBoundary":
       applyMeasureBoundary(command.position, state, trackIndex, outputs);
       return null;
+    case "tuplet":
+      throw new MmlError(command.position, "Nested tuplets are not supported");
     case "octaveShift":
       state.octave += command.delta;
       return null;
@@ -177,14 +204,15 @@ function applyCommand(
         trackIndex,
         command.length,
         command.dotted,
-        noteFrequency(command.note, state.octave, command.accidental)
+        noteFrequency(command.note, state.octave, command.accidental),
+        timingOverride
       );
     case "rest":
       if (state.connectPending) {
         throw new MmlError(command.position, "Tie/slur cannot connect to a rest");
       }
       state.lastNoteEvent = null;
-      return createTimedEvent(state, trackIndex, command.length, command.dotted, null);
+      return createTimedEvent(state, trackIndex, command.length, command.dotted, null, timingOverride);
   }
 }
 
@@ -193,9 +221,10 @@ function createNoteEvent(
   trackIndex: number,
   lengthOverride: number | null,
   dotted: boolean,
-  frequencyHz: number
+  frequencyHz: number,
+  timingOverride?: { durationSec: number; durationTicks: number }
 ): NoteEvent | null {
-  const event = createTimedEvent(state, trackIndex, lengthOverride, dotted, frequencyHz);
+  const event = createTimedEvent(state, trackIndex, lengthOverride, dotted, frequencyHz, timingOverride);
 
   if (!state.connectPending) {
     state.lastNoteEvent = event;
@@ -227,10 +256,11 @@ function createTimedEvent(
   trackIndex: number,
   lengthOverride: number | null,
   dotted: boolean,
-  frequencyHz: number | null
+  frequencyHz: number | null,
+  timingOverride?: { durationSec: number; durationTicks: number }
 ): NoteEvent {
-  const durationSec = noteDurationSec(lengthOverride ?? state.defaultLength, state.tempo, dotted);
-  const durationTicks = noteDurationTicks(lengthOverride ?? state.defaultLength, dotted);
+  const durationSec = timingOverride?.durationSec ?? noteDurationSec(lengthOverride ?? state.defaultLength, state.tempo, dotted);
+  const durationTicks = timingOverride?.durationTicks ?? noteDurationTicks(lengthOverride ?? state.defaultLength, dotted);
   const gateDurationSec = frequencyHz === null ? 0 : durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
   const event: NoteEvent = {
     trackIndex,
