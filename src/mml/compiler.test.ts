@@ -337,6 +337,42 @@ describe("compileMml", () => {
       expect(() => compileMml(source)).toThrow(MmlError);
     }
   });
+
+  it("compiles inline chords as simultaneous notes", () => {
+    const result = compileMml("T120 O4 (CEG)4 A");
+    expect(events(result).map((event) => event.startTimeSec)).toEqual([0, 0, 0, 0.5]);
+    expect(events(result).slice(0, 3).map((event) => event.durationSec)).toEqual([0.5, 0.5, 0.5]);
+    expect(events(result).slice(0, 3).map((event) => event.frequencyHz)).toEqual([
+      noteFrequency("C", 4, 0),
+      noteFrequency("E", 4, 0),
+      noteFrequency("G", 4, 0)
+    ]);
+  });
+
+  it("supports chord accidentals, local octave shifts, default lengths, and dots", () => {
+    const result = compileMml("T120 O4 L8 (C#>C<G). A");
+    expect(events(result).slice(0, 3).map((event) => event.frequencyHz)).toEqual([
+      noteFrequency("C", 4, 1),
+      noteFrequency("C", 5, 0),
+      noteFrequency("G", 4, 0)
+    ]);
+    expect(events(result).slice(0, 3).map((event) => event.durationSec)).toEqual([0.375, 0.375, 0.375]);
+    expect(events(result)[3].startTimeSec).toBeCloseTo(0.375);
+    expect(events(result)[3].frequencyHz).toBe(noteFrequency("A", 4, 0));
+  });
+
+  it("counts a chord as one event inside a tuplet", () => {
+    const result = compileMml("T120 { (CEG) D E }4 A");
+    expect(events(result).slice(0, 3).map((event) => event.startTimeSec)).toEqual([0, 0, 0]);
+    expect(events(result)[3].startTimeSec).toBeCloseTo(1 / 6);
+    expect(events(result)[5].startTimeSec).toBeCloseTo(0.5);
+  });
+
+  it("rejects invalid chords and chord ties", () => {
+    for (const source of ["()4", "(CRG)4", "(CEG", "(CEG)0", "C&(EG)4", "(CEG)4&D"]) {
+      expect(() => compileMml(source)).toThrow(MmlError);
+    }
+  });
 });
 
 function events(song: Song): NoteEvent[] {

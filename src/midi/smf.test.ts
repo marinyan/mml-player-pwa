@@ -32,6 +32,13 @@ describe("SMF export", () => {
     expect(findSequence(bytes, [0x80, 60, 0])).toBeGreaterThanOrEqual(0);
   });
 
+  it("exports inline chord notes at the same MIDI tick", async () => {
+    const bytes = new Uint8Array(await exportSongToSmf(compileMml("@gm1 (CEG)4")).arrayBuffer());
+
+    expect(countStatus(bytes, 0x90)).toBe(3);
+    expect(findSequence(bytes, [0x90, 60, 102, 0x00, 0x90, 64, 102, 0x00, 0x90, 67, 102])).toBeGreaterThanOrEqual(0);
+  });
+
   it("keeps separate GM MML tracks as separate SMF tracks", async () => {
     const song = compileMml("@gm1 C, @gm41 E");
     const bytes = new Uint8Array(await exportSongToSmf(song).arrayBuffer());

@@ -73,27 +73,39 @@ export function compileMml(source: string): Song {
     };
     for (const command of track.commands) {
       if (command.kind === "tuplet") {
-        const timedCount = command.commands.filter((inner) => inner.kind === "note" || inner.kind === "rest").length;
+        const timedCount = command.commands.filter((inner) =>
+          inner.kind === "note" || inner.kind === "rest" || inner.kind === "chord"
+        ).length;
         const totalSec = noteDurationSec(command.length, state.tempo, command.dotted);
         const totalTicks = noteDurationTicks(command.length, command.dotted);
         let timedIndex = 0;
         for (const inner of command.commands) {
-          const isTimed = inner.kind === "note" || inner.kind === "rest";
+          const isTimed = inner.kind === "note" || inner.kind === "rest" || inner.kind === "chord";
+          const timingOverride = isTimed ? {
+            durationSec: totalSec / timedCount,
+            durationTicks: timedIndex === timedCount - 1
+              ? totalTicks - (totalTicks / timedCount) * timedIndex
+              : totalTicks / timedCount
+          } : undefined;
+          if (inner.kind === "chord") {
+            tracks[trackIndex].events.push(...createChordEvents(inner, state, trackIndex, timingOverride));
+            timedIndex += 1;
+            continue;
+          }
           const event = applyCommand(inner, state, trackIndex, {
             diagnostics,
             measureBoundaries,
             timeSignatureEvents,
             explicitBoundaryTicks,
             userFmPatches: extracted.patches.userFmPatches
-          }, isTimed ? {
-            durationSec: totalSec / timedCount,
-            durationTicks: timedIndex === timedCount - 1
-              ? totalTicks - (totalTicks / timedCount) * timedIndex
-              : totalTicks / timedCount
-          } : undefined);
+          }, timingOverride);
           if (isTimed) timedIndex += 1;
           if (event) tracks[trackIndex].events.push(event);
         }
+        continue;
+      }
+      if (command.kind === "chord") {
+        tracks[trackIndex].events.push(...createChordEvents(command, state, trackIndex));
         continue;
       }
       const event = applyCommand(command, state, trackIndex, {
@@ -195,6 +207,8 @@ function applyCommand(
       return null;
     case "tuplet":
       throw new MmlError(command.position, "Nested tuplets are not supported");
+    case "chord":
+      throw new MmlError(command.position, "Chord must be compiled as a simultaneous event group");
     case "octaveShift":
       state.octave += command.delta;
       return null;
@@ -214,6 +228,42 @@ function applyCommand(
       state.lastNoteEvent = null;
       return createTimedEvent(state, trackIndex, command.length, command.dotted, null, timingOverride);
   }
+}
+
+function createChordEvents(
+  command: Extract<MmlCommand, { kind: "chord" }>,
+  state: CompilerState,
+  trackIndex: number,
+  timingOverride?: { durationSec: number; durationTicks: number }
+): NoteEvent[] {
+  if (state.connectPending) {
+    throw new MmlError(command.position, "Tie/slur cannot connect to a chord");
+  }
+
+  const durationSec = timingOverride?.durationSec
+    ?? noteDurationSec(command.length ?? state.defaultLength, state.tempo, command.dotted);
+  const durationTicks = timingOverride?.durationTicks
+    ?? noteDurationTicks(command.length ?? state.defaultLength, command.dotted);
+  const gateDurationSec = durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
+  const startTimeSec = state.cursorSec;
+  const events = command.notes.map((note): NoteEvent => ({
+    trackIndex,
+    startTimeSec,
+    durationSec,
+    gateDurationSec,
+    frequencyHz: noteFrequency(note.note, state.octave + note.octaveDelta, note.accidental),
+    volume: state.volume / 15,
+    pan: state.pan,
+    outputChannelGains: state.outputChannelGains,
+    timbre: state.timbre,
+    gmProgram: state.gmProgram,
+    slurred: false,
+    connectedToNext: false
+  }));
+  state.cursorSec += durationSec;
+  state.cursorTicks += durationTicks;
+  state.lastNoteEvent = null;
+  return events;
 }
 
 function createNoteEvent(

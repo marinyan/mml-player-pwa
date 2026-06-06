@@ -14,12 +14,19 @@ export type MmlCommand =
   | { kind: "timeSignature"; numerator: number; denominator: number; position: number }
   | { kind: "measureBoundary"; position: number }
   | { kind: "tuplet"; commands: MmlCommand[]; length: number; dotted: boolean; position: number }
+  | { kind: "chord"; notes: ChordNote[]; length: number | null; dotted: boolean; position: number }
   | { kind: "octaveShift"; delta: -1 | 1; position: number }
   | { kind: "note"; note: string; accidental: number; length: number | null; dotted: boolean; position: number }
   | { kind: "rest"; length: number | null; dotted: boolean; position: number };
 
 export interface MmlTrack {
   commands: MmlCommand[];
+}
+
+export interface ChordNote {
+  note: string;
+  accidental: number;
+  octaveDelta: number;
 }
 
 export interface MmlAst {
@@ -66,6 +73,10 @@ class Parser {
 
     if (value === "{") {
       return this.readTuplet(token);
+    }
+
+    if (value === "(") {
+      return this.readChord(token);
     }
 
     if (commandLetters.has(value)) {
@@ -165,9 +176,46 @@ class Parser {
     const length = this.readRequiredNumber(token.position, "Tuplet requires a total length after }");
     if (length <= 0) throw new MmlError(token.position, "Tuplet length must be greater than 0");
     const dotted = this.readOptionalDot();
-    const timedCount = commands.filter((command) => command.kind === "note" || command.kind === "rest").length;
+    const timedCount = commands.filter((command) =>
+      command.kind === "note" || command.kind === "rest" || command.kind === "chord"
+    ).length;
     if (timedCount === 0) throw new MmlError(token.position, "Tuplet requires at least one note or rest");
     return { kind: "tuplet", commands, length, dotted, position: token.position };
+  }
+
+  private readChord(token: MmlToken): MmlCommand {
+    const notes: ChordNote[] = [];
+    let octaveDelta = 0;
+
+    while (this.peekOrNull()?.value !== ")") {
+      if (this.isEnd()) throw new MmlError(token.position, "Chord requires )");
+      const item = this.consume();
+      if (item.value === "<" || item.value === ">") {
+        octaveDelta += item.value === ">" ? 1 : -1;
+        continue;
+      }
+      if (!noteLetters.has(item.value)) {
+        throw new MmlError(item.position, "Chords can contain only notes, accidentals, and octave shifts");
+      }
+
+      let accidental = 0;
+      const next = this.peekOrNull();
+      if (next?.value === "#" || next?.value === "+") {
+        accidental = 1;
+        this.index += 1;
+      } else if (next?.value === "-") {
+        accidental = -1;
+        this.index += 1;
+      }
+      notes.push({ note: item.value, accidental, octaveDelta });
+    }
+
+    this.index += 1;
+    if (notes.length === 0) throw new MmlError(token.position, "Chord requires at least one note");
+    const length = this.readOptionalNumber();
+    if (length !== null && length <= 0) throw new MmlError(token.position, "Chord length must be greater than 0");
+    const dotted = this.readOptionalDot();
+    return { kind: "chord", notes, length, dotted, position: token.position };
   }
 
   private readNote(token: MmlToken): MmlCommand {
