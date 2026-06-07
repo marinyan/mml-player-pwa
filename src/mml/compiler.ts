@@ -76,8 +76,8 @@ export function compileMml(source: string): Song {
         const timedCount = command.commands.filter((inner) =>
           inner.kind === "note" || inner.kind === "rest" || inner.kind === "chord"
         ).length;
-        const totalSec = noteDurationSec(command.length, state.tempo, command.dotted);
-        const totalTicks = noteDurationTicks(command.length, command.dotted);
+        const totalSec = durationSecForLength(command.length, state, command.dotted);
+        const totalTicks = durationTicksForLength(command.length, state, command.dotted);
         let timedIndex = 0;
         for (const inner of command.commands) {
           const isTimed = inner.kind === "note" || inner.kind === "rest" || inner.kind === "chord";
@@ -241,9 +241,9 @@ function createChordEvents(
   }
 
   const durationSec = timingOverride?.durationSec
-    ?? noteDurationSec(command.length ?? state.defaultLength, state.tempo, command.dotted);
+    ?? durationSecForLength(command.length ?? state.defaultLength, state, command.dotted);
   const durationTicks = timingOverride?.durationTicks
-    ?? noteDurationTicks(command.length ?? state.defaultLength, command.dotted);
+    ?? durationTicksForLength(command.length ?? state.defaultLength, state, command.dotted);
   const gateDurationSec = durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
   const startTimeSec = state.cursorSec;
   const events = command.notes.map((note): NoteEvent => ({
@@ -302,15 +302,15 @@ function createNoteEvent(
 }
 
 function createTimedEvent(
-  state: TrackState,
+  state: CompilerState,
   trackIndex: number,
   lengthOverride: number | null,
   dotted: boolean,
   frequencyHz: number | null,
   timingOverride?: { durationSec: number; durationTicks: number }
 ): NoteEvent {
-  const durationSec = timingOverride?.durationSec ?? noteDurationSec(lengthOverride ?? state.defaultLength, state.tempo, dotted);
-  const durationTicks = timingOverride?.durationTicks ?? noteDurationTicks(lengthOverride ?? state.defaultLength, dotted);
+  const durationSec = timingOverride?.durationSec ?? durationSecForLength(lengthOverride ?? state.defaultLength, state, dotted);
+  const durationTicks = timingOverride?.durationTicks ?? durationTicksForLength(lengthOverride ?? state.defaultLength, state, dotted);
   const gateDurationSec = frequencyHz === null ? 0 : durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
   const event: NoteEvent = {
     trackIndex,
@@ -461,6 +461,17 @@ function addMeasureAlignmentDiagnostics(explicitBoundaryTicks: Map<number, numbe
 function noteDurationTicks(length: number, dotted: boolean): number {
   const duration = ticksPerQuarter * (4 / length);
   return dotted ? duration * 1.5 : duration;
+}
+
+function durationTicksForLength(length: number, state: CompilerState, dotted: boolean): number {
+  if (length === 1) {
+    return dotted ? state.measureLengthTicks * 1.5 : state.measureLengthTicks;
+  }
+  return noteDurationTicks(length, dotted);
+}
+
+function durationSecForLength(length: number, state: CompilerState, dotted: boolean): number {
+  return (durationTicksForLength(length, state, dotted) / ticksPerQuarter) * (60 / state.tempo);
 }
 
 function timeSignatureLabel(state: CompilerState): string {

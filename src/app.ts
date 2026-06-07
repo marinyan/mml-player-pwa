@@ -103,7 +103,8 @@ export function mountApp(root: HTMLElement): void {
     try {
       const next = compileMml(input.value);
       tempoValue.textContent = String(displayTempo(next));
-      message.textContent = `${eventCount(next)} events, ${next.tracks.length} track(s), ${next.durationSec.toFixed(1)}s`;
+      message.textContent = compileMessage(next);
+      message.classList.toggle("warning", next.master.diagnostics.length > 0);
       message.classList.remove("error");
       compiled = next;
       return next;
@@ -116,6 +117,7 @@ export function mountApp(root: HTMLElement): void {
             : "Unknown error";
       message.textContent = text;
       message.classList.add("error");
+      message.classList.remove("warning");
       compiled = null;
       return null;
     }
@@ -134,6 +136,7 @@ export function mountApp(root: HTMLElement): void {
     compileCurrent();
     message.textContent = "Loaded demo song";
     message.classList.remove("error");
+    message.classList.remove("warning");
   });
 
   importButton.addEventListener("click", () => {
@@ -153,6 +156,7 @@ export function mountApp(root: HTMLElement): void {
       compileCurrent();
       message.textContent = `Imported ${file.name}`;
       message.classList.remove("error");
+      message.classList.remove("warning");
     }).catch((error: unknown) => {
       message.textContent = error instanceof Error ? error.message : "Import failed";
       message.classList.add("error");
@@ -170,6 +174,7 @@ export function mountApp(root: HTMLElement): void {
     saveLastExportedMml(input.value);
     message.textContent = `Exported ${fileName}`;
     message.classList.remove("error");
+    message.classList.remove("warning");
   });
 
   wavExportButton.addEventListener("click", () => {
@@ -184,6 +189,7 @@ export function mountApp(root: HTMLElement): void {
     if (estimatedBytes === 0) {
       message.textContent = "WAV export requires at least one audible note";
       message.classList.add("error");
+      message.classList.remove("warning");
       return;
     }
     if (estimatedBytes > 50 * 1024 * 1024 && !window.confirm(`Estimated WAV size is ${formatBytes(estimatedBytes)}. Continue?`)) {
@@ -193,16 +199,19 @@ export function mountApp(root: HTMLElement): void {
     wavExportButton.disabled = true;
     message.textContent = "Rendering WAV...";
     message.classList.remove("error");
+    message.classList.remove("warning");
 
     void renderSongToWav(song)
       .then((blob) => {
         downloadBlob(blob, fileName);
         message.textContent = `Exported ${fileName} (${formatBytes(blob.size)})`;
         message.classList.remove("error");
+        message.classList.remove("warning");
       })
       .catch((error: unknown) => {
         message.textContent = error instanceof Error ? error.message : "WAV export failed";
         message.classList.add("error");
+        message.classList.remove("warning");
       })
       .finally(() => {
         wavExportButton.disabled = false;
@@ -216,6 +225,7 @@ export function mountApp(root: HTMLElement): void {
     if (gmTrackCount(song) === 0) {
       message.textContent = "MIDI export requires at least one @gm note";
       message.classList.add("error");
+      message.classList.remove("warning");
       return;
     }
 
@@ -227,9 +237,11 @@ export function mountApp(root: HTMLElement): void {
       downloadBlob(blob, fileName);
       message.textContent = `Exported ${fileName} (${gmTrackCount(song)} GM track(s))`;
       message.classList.remove("error");
+      message.classList.remove("warning");
     } catch (error) {
       message.textContent = error instanceof Error ? error.message : "MIDI export failed";
       message.classList.add("error");
+      message.classList.remove("warning");
     }
   });
 
@@ -278,6 +290,12 @@ function statusLabel(status: PlaybackStatus): string {
 
 function eventCount(song: Song): number {
   return song.tracks.reduce((count, track) => count + track.events.length, 0);
+}
+
+function compileMessage(song: Song): string {
+  const summary = `${eventCount(song)} events, ${song.tracks.length} track(s), ${song.durationSec.toFixed(1)}s`;
+  if (song.master.diagnostics.length === 0) return summary;
+  return `${summary}\nWARNING: ${song.master.diagnostics.map((diagnostic) => diagnostic.message).join(" / ")}`;
 }
 
 function displayTempo(song: Song): number {

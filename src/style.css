@@ -227,6 +227,12 @@ button.primary {
   color: #ffd0d0;
 }
 
+.message.warning {
+  border-left-color: #facc15;
+  color: #fde68a;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 560px) {
   .app-shell {
     grid-template-rows: auto minmax(300px, 1fr) auto auto auto;

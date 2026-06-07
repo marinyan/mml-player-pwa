@@ -290,6 +290,15 @@ describe("compileMml", () => {
     expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節長超過"))).toBe(true);
   });
 
+  it("treats length 1 as one current measure", () => {
+    const result = compileMml("#TIME 3/4 T120 C1 | #TIME 4/4 C1 |");
+    expect(events(result)).toHaveLength(2);
+    expect(events(result)[0].durationSec).toBeCloseTo(1.5);
+    expect(events(result)[1].startTimeSec).toBeCloseTo(1.5);
+    expect(events(result)[1].durationSec).toBeCloseTo(2);
+    expect(result.master.diagnostics).toEqual([]);
+  });
+
   it("does not create NoteEvents from measure bars", () => {
     const result = compileMml("L4 C | D");
     expect(events(result)).toHaveLength(2);
