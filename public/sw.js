@@ -1,8 +1,6 @@
-const cacheName = "mml-player-pwa-v21";
+const cacheName = "mml-player-pwa-v22";
 
 const shellFiles = [
-  "./",
-  "./index.html",
   "./manifest.webmanifest",
   "./icons/icon.svg"
 ];
@@ -26,6 +24,21 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(cacheName).then((cache) => cache.put("./index.html", clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {
