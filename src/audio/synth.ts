@@ -185,13 +185,18 @@ export class Synth {
   }
 
   private createToneOutput(event: NoteEvent, output: GainNode): AudioNode {
+    const highpass = this.audioContext.createBiquadFilter();
     const filter = this.audioContext.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.Q.value = 0.5;
+    highpass.frequency.setValueAtTime(35, event.startTimeSec);
     filter.type = "lowpass";
     filter.Q.value = 0.45;
     const cutoff = Math.min(7200, Math.max((event.frequencyHz ?? 440) * 14, 1800));
     filter.frequency.setValueAtTime(cutoff, event.startTimeSec);
+    highpass.connect(filter);
     filter.connect(output);
-    return filter;
+    return highpass;
   }
 }
 

@@ -237,9 +237,9 @@ function bassFm(id: number, name: string): FmPatch {
 function bowedFm(id: number, name: string): FmPatch {
   const pizz = id === 46 || id === 47;
   if (pizz) return pluckFm(id, name, 0.006);
-  return patch(id, name, 1, [
-    op(1, 0.64, 0.08, 0.32, 0.72, 0.22),
-    op(2, 0.18, 0.1, 0.32, 0.5, 0.2)
+  return patch(id, name, 0, [
+    op(1, 0.54, 0.1, 0.38, 0.7, 0.28),
+    op(2, 0.06, 0.12, 0.36, 0.35, 0.24)
   ]);
 }
 
