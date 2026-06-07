@@ -15,16 +15,24 @@ interface SynthOptions {
 
 export class Synth {
   private masterGain: GainNode;
+  private compressor: DynamicsCompressorNode;
   private readonly outputChannels: number;
   private readonly merger: ChannelMergerNode | null;
 
   constructor(private readonly audioContext: SynthAudioContext, options: SynthOptions = {}) {
     this.outputChannels = Math.min(Math.max(options.outputChannels ?? 2, 1), 6);
     this.masterGain = audioContext.createGain();
-    this.masterGain.gain.value = 0.75;
+    this.masterGain.gain.value = 0.45;
+    this.compressor = audioContext.createDynamicsCompressor();
+    this.compressor.threshold.value = -18;
+    this.compressor.knee.value = 18;
+    this.compressor.ratio.value = 8;
+    this.compressor.attack.value = 0.003;
+    this.compressor.release.value = 0.18;
     this.merger = this.outputChannels > 1 ? audioContext.createChannelMerger(this.outputChannels) : null;
     this.merger?.connect(this.masterGain);
-    this.masterGain.connect(audioContext.destination);
+    this.masterGain.connect(this.compressor);
+    this.compressor.connect(audioContext.destination);
   }
 
   schedule(event: NoteEvent, startAt: number, patches: PatchRegistry): void {
@@ -158,6 +166,7 @@ export class Synth {
   disconnect(): void {
     this.merger?.disconnect();
     this.masterGain.disconnect();
+    this.compressor.disconnect();
   }
 
   private connectOutput(source: AudioNode, event: NoteEvent): void {
