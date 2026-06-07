@@ -28,8 +28,9 @@ export class Scheduler {
     this.nextEventIndex = 0;
     this.setStatus("playing");
     const events = flattenSongEvents(song);
-    this.scheduleAhead(song, events);
-    this.timerId = window.setInterval(() => this.scheduleAhead(song, events), 60);
+    const voiceGains = calculateVoiceGains(events);
+    this.scheduleAhead(song, events, voiceGains);
+    this.timerId = window.setInterval(() => this.scheduleAhead(song, events, voiceGains), 60);
     this.tickTimerId = window.setInterval(() => this.reportPosition(song.durationSec), 100);
   }
 
@@ -59,7 +60,7 @@ export class Scheduler {
     return this.status;
   }
 
-  private scheduleAhead(song: Song, events: NoteEvent[]): void {
+  private scheduleAhead(song: Song, events: NoteEvent[], voiceGains: WeakMap<NoteEvent, number>): void {
     if (!this.audioContext || !this.synth) return;
 
     const horizonSec = 0.35;
@@ -70,7 +71,9 @@ export class Scheduler {
       events[this.nextEventIndex].startTimeSec <= playheadSec + horizonSec
     ) {
       const event = events[this.nextEventIndex];
-      this.synth.schedule(event, this.startAudioTime + event.startTimeSec, song.patches);
+      this.synth.schedule(event, this.startAudioTime + event.startTimeSec, song.patches, {
+        voiceGain: voiceGains.get(event)
+      });
       this.nextEventIndex += 1;
     }
 
@@ -95,4 +98,23 @@ function flattenSongEvents(song: Song): NoteEvent[] {
   return song.tracks
     .flatMap((track) => track.events)
     .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
+}
+
+function calculateVoiceGains(events: NoteEvent[]): WeakMap<NoteEvent, number> {
+  const startCounts = new Map<number, number>();
+  const audibleEvents = events.filter((event) => event.frequencyHz !== null && event.gateDurationSec > 0);
+  for (const event of audibleEvents) {
+    const key = startKey(event.startTimeSec);
+    startCounts.set(key, (startCounts.get(key) ?? 0) + 1);
+  }
+
+  const gains = new WeakMap<NoteEvent, number>();
+  for (const event of audibleEvents) {
+    gains.set(event, 1 / Math.sqrt(startCounts.get(startKey(event.startTimeSec)) ?? 1));
+  }
+  return gains;
+}
+
+function startKey(timeSec: number): number {
+  return Math.round(timeSec * 1_000_000);
 }

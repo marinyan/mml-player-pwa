@@ -13,6 +13,10 @@ interface SynthOptions {
   outputChannels?: number;
 }
 
+interface ScheduleOptions {
+  voiceGain?: number;
+}
+
 export class Synth {
   private masterGain: GainNode;
   private compressor: DynamicsCompressorNode;
@@ -35,7 +39,7 @@ export class Synth {
     this.compressor.connect(audioContext.destination);
   }
 
-  schedule(event: NoteEvent, startAt: number, patches: PatchRegistry): void {
+  schedule(event: NoteEvent, startAt: number, patches: PatchRegistry, options: ScheduleOptions = {}): void {
     if (event.frequencyHz === null || event.gateDurationSec <= 0 || event.volume <= 0) {
       return;
     }
@@ -46,7 +50,7 @@ export class Synth {
     const envelopeEndAt = event.connectedToNext ? endAt + connectedReleaseSec : endAt;
     const noteAttackSec = event.slurred ? slurAttackSec : attackSec;
     const releaseStart = event.connectedToNext ? endAt : Math.max(startAt + noteAttackSec, endAt - releaseSec);
-    const peak = Math.min(Math.max(event.volume, 0), 1);
+    const peak = Math.min(Math.max(event.volume * lowFrequencyGain(event.frequencyHz) * (options.voiceGain ?? 1), 0), 1);
 
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0001), startAt + noteAttackSec);
@@ -202,6 +206,10 @@ export class Synth {
 
 function modulationScale(frequencyHz: number, feedback: number): number {
   return frequencyHz * (1 + feedback * 0.12);
+}
+
+function lowFrequencyGain(frequencyHz: number): number {
+  return Math.min(1, Math.max(0.5, Math.sqrt(frequencyHz / 130)));
 }
 
 function applyAdsr(param: AudioParam, operator: FmOperator, startAt: number, endAt: number, scale = 1): void {

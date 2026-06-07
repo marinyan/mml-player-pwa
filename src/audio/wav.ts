@@ -108,9 +108,11 @@ async function renderSongAudio(song: Song, sampleRate: number, durationSec: numb
   const frameCount = Math.max(1, Math.ceil(durationSec * sampleRate));
   const context = new OfflineAudioContext(channelCount, frameCount, sampleRate);
   const synth = new Synth(context, { outputChannels: channelCount });
+  const events = flattenSongEvents(song);
+  const voiceGains = calculateVoiceGains(events);
 
-  for (const event of flattenSongEvents(song)) {
-    synth.schedule(event, event.startTimeSec, song.patches);
+  for (const event of events) {
+    synth.schedule(event, event.startTimeSec, song.patches, { voiceGain: voiceGains.get(event) });
   }
 
   const rendered = await context.startRendering();
@@ -122,6 +124,25 @@ function flattenSongEvents(song: Song): NoteEvent[] {
   return song.tracks
     .flatMap((track) => track.events)
     .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
+}
+
+function calculateVoiceGains(events: NoteEvent[]): WeakMap<NoteEvent, number> {
+  const startCounts = new Map<number, number>();
+  const audibleEvents = events.filter((event) => event.frequencyHz !== null && event.gateDurationSec > 0);
+  for (const event of audibleEvents) {
+    const key = startKey(event.startTimeSec);
+    startCounts.set(key, (startCounts.get(key) ?? 0) + 1);
+  }
+
+  const gains = new WeakMap<NoteEvent, number>();
+  for (const event of audibleEvents) {
+    gains.set(event, 1 / Math.sqrt(startCounts.get(startKey(event.startTimeSec)) ?? 1));
+  }
+  return gains;
+}
+
+function startKey(timeSec: number): number {
+  return Math.round(timeSec * 1_000_000);
 }
 
 function readChannels(buffer: AudioBufferLike): Float32Array[] {
