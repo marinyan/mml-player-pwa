@@ -1,8 +1,8 @@
 import type { FmOperator, FmPatch, NoteEvent, PatchRegistry } from "../mml/types";
 
-const attackSec = 0.008;
-const slurAttackSec = 0.001;
-const releaseSec = 0.025;
+const attackSec = 0.014;
+const slurAttackSec = 0.004;
+const releaseSec = 0.04;
 const connectedReleaseSec = 0.006;
 
 type SynthAudioContext = BaseAudioContext & {
@@ -24,11 +24,11 @@ export class Synth {
     this.masterGain = audioContext.createGain();
     this.masterGain.gain.value = 0.45;
     this.compressor = audioContext.createDynamicsCompressor();
-    this.compressor.threshold.value = -18;
-    this.compressor.knee.value = 18;
-    this.compressor.ratio.value = 8;
-    this.compressor.attack.value = 0.003;
-    this.compressor.release.value = 0.18;
+    this.compressor.threshold.value = -16;
+    this.compressor.knee.value = 24;
+    this.compressor.ratio.value = 4;
+    this.compressor.attack.value = 0.008;
+    this.compressor.release.value = 0.22;
     this.merger = this.outputChannels > 1 ? audioContext.createChannelMerger(this.outputChannels) : null;
     this.merger?.connect(this.masterGain);
     this.masterGain.connect(this.compressor);
@@ -41,6 +41,7 @@ export class Synth {
     }
 
     const gain = this.audioContext.createGain();
+    const toneOutput = this.createToneOutput(event, gain);
     const endAt = startAt + event.gateDurationSec;
     const envelopeEndAt = event.connectedToNext ? endAt + connectedReleaseSec : endAt;
     const noteAttackSec = event.slurred ? slurAttackSec : attackSec;
@@ -55,24 +56,24 @@ export class Synth {
 
     const gmPatch = event.gmProgram === null ? undefined : patches.gmPatches.get(event.gmProgram);
     if (gmPatch?.fmPatch) {
-      this.scheduleUserFm(event, gmPatch.fmPatch, gain, startAt, envelopeEndAt);
+      this.scheduleUserFm(event, gmPatch.fmPatch, toneOutput, startAt, envelopeEndAt);
       return;
     }
     const eventTimbre = gmPatch?.builtinTimbre ?? event.timbre;
 
     const userFmPatch = patches.userFmPatches.get(event.timbre);
     if (!gmPatch && userFmPatch) {
-      this.scheduleUserFm(event, userFmPatch, gain, startAt, envelopeEndAt);
+      this.scheduleUserFm(event, userFmPatch, toneOutput, startAt, envelopeEndAt);
       return;
     }
 
     if (eventTimbre === 4 || eventTimbre === 5) {
-      this.scheduleFm(event, eventTimbre, gain, startAt, envelopeEndAt);
+      this.scheduleFm(event, eventTimbre, toneOutput, startAt, envelopeEndAt);
       return;
     }
 
     if (eventTimbre === 6) {
-      this.scheduleNoise(event, gain, startAt, envelopeEndAt);
+      this.scheduleNoise(event, toneOutput, startAt, envelopeEndAt);
       return;
     }
 
@@ -80,12 +81,12 @@ export class Synth {
     oscillator.type = oscillatorTypeForTimbre(eventTimbre);
     oscillator.frequency.setValueAtTime(event.frequencyHz, startAt);
 
-    oscillator.connect(gain);
+    oscillator.connect(toneOutput);
     oscillator.start(startAt);
     oscillator.stop(envelopeEndAt + 0.01);
   }
 
-  private scheduleFm(event: NoteEvent, timbre: number, output: GainNode, startAt: number, endAt: number): void {
+  private scheduleFm(event: NoteEvent, timbre: number, output: AudioNode, startAt: number, endAt: number): void {
     if (event.frequencyHz === null) return;
 
     const carrier = this.audioContext.createOscillator();
@@ -112,7 +113,7 @@ export class Synth {
     modulator.stop(endAt + 0.01);
   }
 
-  private scheduleNoise(event: NoteEvent, output: GainNode, startAt: number, endAt: number): void {
+  private scheduleNoise(event: NoteEvent, output: AudioNode, startAt: number, endAt: number): void {
     const durationSec = Math.max(endAt - startAt + 0.02, 0.02);
     const frameCount = Math.ceil(this.audioContext.sampleRate * durationSec);
     const buffer = this.audioContext.createBuffer(1, frameCount, this.audioContext.sampleRate);
@@ -135,7 +136,7 @@ export class Synth {
     source.stop(endAt + 0.01);
   }
 
-  private scheduleUserFm(event: NoteEvent, patch: FmPatch, output: GainNode, startAt: number, endAt: number): void {
+  private scheduleUserFm(event: NoteEvent, patch: FmPatch, output: AudioNode, startAt: number, endAt: number): void {
     if (event.frequencyHz === null) return;
     const baseFrequencyHz = event.frequencyHz;
 
@@ -181,6 +182,16 @@ export class Synth {
       source.connect(channelGain);
       channelGain.connect(this.merger, 0, channel);
     }
+  }
+
+  private createToneOutput(event: NoteEvent, output: GainNode): AudioNode {
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 0.45;
+    const cutoff = Math.min(7200, Math.max((event.frequencyHz ?? 440) * 14, 1800));
+    filter.frequency.setValueAtTime(cutoff, event.startTimeSec);
+    filter.connect(output);
+    return filter;
   }
 }
 
