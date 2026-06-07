@@ -103,7 +103,7 @@ export class Synth {
     carrier.frequency.setValueAtTime(event.frequencyHz, startAt);
     modulator.frequency.setValueAtTime(event.frequencyHz * (isBass ? 1 : 2), startAt);
 
-    const modulationDepth = event.frequencyHz * (isBass ? 0.75 : 2.4);
+    const modulationDepth = event.frequencyHz * (isBass ? 0.75 : 2.4) * fmModulationKeyScale(event.frequencyHz);
     modGain.gain.setValueAtTime(modulationDepth, startAt);
     modGain.gain.exponentialRampToValueAtTime(Math.max(event.frequencyHz * 0.08, 1), endAt);
 
@@ -158,7 +158,13 @@ export class Synth {
     carrier.gain.connect(output);
 
     for (let index = 1; index < oscillators.length; index += 1) {
-      applyAdsr(oscillators[index].gain.gain, oscillators[index].operator, startAt, endAt, modulationScale(baseFrequencyHz, patch.feedback));
+      applyAdsr(
+        oscillators[index].gain.gain,
+        oscillators[index].operator,
+        startAt,
+        endAt,
+        modulationScale(baseFrequencyHz, patch.feedback) * fmModulationKeyScale(baseFrequencyHz)
+      );
       oscillators[index].gain.connect(oscillators[index - 1].oscillator.frequency);
     }
 
@@ -206,6 +212,10 @@ export class Synth {
 
 function modulationScale(frequencyHz: number, feedback: number): number {
   return frequencyHz * (1 + feedback * 0.12);
+}
+
+function fmModulationKeyScale(frequencyHz: number): number {
+  return Math.min(1, Math.max(0.35, Math.sqrt(frequencyHz / 220)));
 }
 
 function lowFrequencyGain(frequencyHz: number): number {
