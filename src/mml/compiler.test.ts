@@ -28,6 +28,24 @@ describe("compileMml", () => {
     expect(events(result).map((event) => event.durationSec)).toEqual([0.5, 0.5, 0.5]);
   });
 
+  it("applies Q1-Q8 gate time without changing note length", () => {
+    const result = compileMml("T120 L4 Q4 C Q8 D R");
+    expect(events(result).map((event) => event.durationSec)).toEqual([0.5, 0.5, 0.5]);
+    expect(events(result).map((event) => event.gateDurationSec)).toEqual([0.25, 0.5, 0]);
+  });
+
+  it("applies Q gate time to chords and notes inside tuplets", () => {
+    const chord = compileMml("T120 Q2 (CEG)4");
+    expect(events(chord).map((event) => event.gateDurationSec)).toEqual([0.125, 0.125, 0.125]);
+    const tuplet = compileMml("T120 Q4 { C D E }4");
+    expect(events(tuplet).map((event) => event.gateDurationSec)).toEqual([1 / 12, 1 / 12, 1 / 12]);
+  });
+
+  it("rejects Q values outside 1-8", () => {
+    expect(() => compileMml("Q0 C")).toThrow(MmlError);
+    expect(() => compileMml("Q9 C")).toThrow(MmlError);
+  });
+
   it("stores tempo changes in song master", () => {
     const result = compileMml("T120 L4 C T60 D");
     expect(result.master.tempoEvents).toEqual([
