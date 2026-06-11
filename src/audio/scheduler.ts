@@ -1,5 +1,5 @@
 import type { NoteEvent, Song } from "../mml/types";
-import { calculateSongVoiceGain } from "./mix";
+import { calculateSongVoiceGain, calculateTimingOffsets } from "./mix";
 import { Synth } from "./synth";
 
 export type PlaybackStatus = "idle" | "playing" | "stopped" | "ended";
@@ -30,8 +30,9 @@ export class Scheduler {
     this.setStatus("playing");
     const events = flattenSongEvents(song);
     const voiceGain = calculateSongVoiceGain(events);
-    this.scheduleAhead(song, events, voiceGain);
-    this.timerId = window.setInterval(() => this.scheduleAhead(song, events, voiceGain), 60);
+    const timingOffsets = calculateTimingOffsets(events, song.master.tempoEvents);
+    this.scheduleAhead(song, events, voiceGain, timingOffsets);
+    this.timerId = window.setInterval(() => this.scheduleAhead(song, events, voiceGain, timingOffsets), 60);
     this.tickTimerId = window.setInterval(() => this.reportPosition(song.durationSec), 100);
   }
 
@@ -63,7 +64,12 @@ export class Scheduler {
     return this.status;
   }
 
-  private scheduleAhead(song: Song, events: NoteEvent[], voiceGain: number): void {
+  private scheduleAhead(
+    song: Song,
+    events: NoteEvent[],
+    voiceGain: number,
+    timingOffsets: WeakMap<NoteEvent, number>
+  ): void {
     if (!this.audioContext || !this.synth) return;
 
     const horizonSec = 0.35;
@@ -74,7 +80,8 @@ export class Scheduler {
       events[this.nextEventIndex].startTimeSec <= playheadSec + horizonSec
     ) {
       const event = events[this.nextEventIndex];
-      this.synth.schedule(event, this.startAudioTime + event.startTimeSec, song.patches, {
+      const timingOffset = timingOffsets.get(event) ?? 0;
+      this.synth.schedule(event, this.startAudioTime + event.startTimeSec + timingOffset, song.patches, {
         voiceGain
       });
       this.nextEventIndex += 1;

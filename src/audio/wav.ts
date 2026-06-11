@@ -1,5 +1,5 @@
 import type { NoteEvent, Song } from "../mml/types";
-import { calculateSongVoiceGain } from "./mix";
+import { calculateSongVoiceGain, calculateTimingOffsets } from "./mix";
 import { Synth } from "./synth";
 
 const defaultSampleRate = 44100;
@@ -111,9 +111,10 @@ async function renderSongAudio(song: Song, sampleRate: number, durationSec: numb
   const synth = new Synth(context, { outputChannels: channelCount });
   const events = flattenSongEvents(song);
   const voiceGain = calculateSongVoiceGain(events);
+  const timingOffsets = calculateTimingOffsets(events, song.master.tempoEvents);
 
   for (const event of events) {
-    synth.schedule(event, event.startTimeSec, song.patches, { voiceGain });
+    synth.schedule(event, event.startTimeSec + (timingOffsets.get(event) ?? 0), song.patches, { voiceGain });
   }
 
   const rendered = await context.startRendering();
