@@ -40,6 +40,7 @@ const initialState: TrackState = {
 };
 
 interface CompilerState extends TrackState {
+  dynamicStep: -1 | 0 | 1;
   connectPending: boolean;
   lastNoteEvent: NoteEvent | null;
   measureStartTick: number;
@@ -65,6 +66,7 @@ export function compileMml(source: string): Song {
   ast.tracks.forEach((track, trackIndex) => {
     const state: CompilerState = {
       ...initialState,
+      dynamicStep: 0,
       connectPending: false,
       lastNoteEvent: null,
       measureStartTick: 0,
@@ -178,6 +180,10 @@ function applyCommand(
       return null;
     case "volume":
       state.volume = command.value;
+      state.dynamicStep = 0;
+      return null;
+    case "dynamicChange":
+      state.dynamicStep = command.step;
       return null;
     case "pan":
       state.pan = command.value;
@@ -266,6 +272,7 @@ function createChordEvents(
   state.cursorSec += durationSec;
   state.cursorTicks += durationTicks;
   state.lastNoteEvent = null;
+  advanceDynamic(state);
   return events;
 }
 
@@ -333,7 +340,14 @@ function createTimedEvent(
   };
   state.cursorSec += durationSec;
   state.cursorTicks += durationTicks;
+  if (frequencyHz !== null) {
+    advanceDynamic(state);
+  }
   return event;
+}
+
+function advanceDynamic(state: CompilerState): void {
+  state.volume = Math.min(Math.max(state.volume + state.dynamicStep, 0), 15);
 }
 
 function canTie(previous: NoteEvent, next: NoteEvent): boolean {

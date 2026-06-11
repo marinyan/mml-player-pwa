@@ -115,6 +115,46 @@ G8D8C8D8C8<G8>`);
     expect(events(result).map((event) => event.timbre)).toEqual([1, 4, 5, 6]);
   });
 
+  it("applies cresc. and dim. one volume step per note", () => {
+    const crescendo = compileMml("V10 cresc. C D E");
+    const diminuendo = compileMml("V10 dim. C D E");
+
+    expect(events(crescendo).map((event) => event.volume * 15)).toEqual([10, 11, 12]);
+    expect(events(diminuendo).map((event) => event.volume * 15)).toEqual([10, 9, 8]);
+  });
+
+  it("does not advance cresc. or dim. on rests", () => {
+    const result = compileMml("V10 cresc. C R D");
+    const audible = events(result).filter((event) => event.frequencyHz !== null);
+
+    expect(audible.map((event) => event.volume * 15)).toEqual([10, 11]);
+  });
+
+  it("advances cresc. and dim. once per chord", () => {
+    const result = compileMml("V10 cresc. (CEG)4 A");
+
+    expect(result.tracks[0].events.slice(0, 3).map((event) => event.volume * 15)).toEqual([10, 10, 10]);
+    expect(result.tracks[0].events[3].volume * 15).toBe(11);
+  });
+
+  it("cancels cresc. and dim. with an explicit volume command", () => {
+    const result = compileMml("V10 cresc. C D V5 E F");
+
+    expect(events(result).map((event) => event.volume * 15)).toEqual([10, 11, 5, 5]);
+  });
+
+  it("clamps cresc. and dim. to the supported volume range", () => {
+    const result = compileMml("V15 cresc. C D V0 dim. E F");
+
+    expect(events(result).map((event) => event.volume * 15)).toEqual([15, 15, 0, 0]);
+  });
+
+  it("accepts cresc. and dim. case-insensitively", () => {
+    const result = compileMml("V8 CrEsC. C dIm. D");
+
+    expect(events(result).map((event) => event.volume * 15)).toEqual([8, 9]);
+  });
+
   it("compiles pan changes into 6-channel output gains", () => {
     const result = compileMml("P-1.0 C P0 D P+1.0 E");
     const outputGains = events(result).map((event) => event.outputChannelGains);

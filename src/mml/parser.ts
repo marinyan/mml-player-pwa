@@ -6,6 +6,7 @@ export type MmlCommand =
   | { kind: "octave"; value: number; position: number }
   | { kind: "defaultLength"; value: number; position: number }
   | { kind: "volume"; value: number; position: number }
+  | { kind: "dynamicChange"; step: -1 | 1; position: number }
   | { kind: "pan"; value: number; position: number }
   | { kind: "gate"; value: number; position: number }
   | { kind: "timbre"; value: number; position: number }
@@ -77,6 +78,16 @@ class Parser {
 
     if (value === "(") {
       return this.readChord(token);
+    }
+
+    if (value === "C" && this.matchesLiteral("RESC.")) {
+      this.readLiteral("RESC.", token.position, "Cresc. requires a trailing dot");
+      return { kind: "dynamicChange", step: 1, position: token.position };
+    }
+
+    if (value === "D" && this.matchesLiteral("IM.")) {
+      this.readLiteral("IM.", token.position, "Dim. requires a trailing dot");
+      return { kind: "dynamicChange", step: -1, position: token.position };
     }
 
     if (commandLetters.has(value)) {
@@ -284,6 +295,10 @@ class Parser {
         throw new MmlError(token.position, message);
       }
     }
+  }
+
+  private matchesLiteral(text: string): boolean {
+    return [...text].every((expected, offset) => this.tokens[this.index + offset]?.value === expected);
   }
 
   private readOptionalNumber(): number | null {
