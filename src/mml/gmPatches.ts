@@ -135,13 +135,14 @@ const gmNames = [
   "Gunshot"
 ] as const;
 
+let cachedGmPatchEntries: Array<[number, GmPatch]> | null = null;
+
 export function createGmPatches(): Map<number, GmPatch> {
-  return new Map(
-    gmNames.map((name, index) => {
+  cachedGmPatchEntries ??= gmNames.map((name, index) => {
       const id = index + 1;
-      return [id, createGmPatch(id, name)];
-    })
-  );
+      return [id, createGmPatch(id, name)] as [number, GmPatch];
+    });
+  return new Map(cachedGmPatchEntries);
 }
 
 function createGmPatch(id: number, name: string): GmPatch {

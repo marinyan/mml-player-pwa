@@ -1,5 +1,5 @@
 import type { NoteEvent, Song } from "../mml/types";
-import { calculateSongVoiceGain, calculateTimingOffsets } from "./mix";
+import { createPlaybackPlan } from "./playbackPlan";
 import { Synth } from "./synth";
 
 export type PlaybackStatus = "idle" | "playing" | "stopped" | "ended";
@@ -28,9 +28,7 @@ export class Scheduler {
     this.startAudioTime = this.audioContext.currentTime + 0.08;
     this.nextEventIndex = 0;
     this.setStatus("playing");
-    const events = flattenSongEvents(song);
-    const voiceGain = calculateSongVoiceGain(events);
-    const timingOffsets = calculateTimingOffsets(events, song.master.tempoEvents);
+    const { events, voiceGain, timingOffsets } = createPlaybackPlan(song);
     this.scheduleAhead(song, events, voiceGain, timingOffsets);
     this.timerId = window.setInterval(() => this.scheduleAhead(song, events, voiceGain, timingOffsets), 60);
     this.tickTimerId = window.setInterval(() => this.reportPosition(song.durationSec), 100);
@@ -103,10 +101,4 @@ export class Scheduler {
     this.status = status;
     this.callbacks.onStatusChange?.(status);
   }
-}
-
-function flattenSongEvents(song: Song): NoteEvent[] {
-  return song.tracks
-    .flatMap((track) => track.events)
-    .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
 }

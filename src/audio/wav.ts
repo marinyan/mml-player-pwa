@@ -1,5 +1,5 @@
-import type { NoteEvent, Song } from "../mml/types";
-import { calculateSongVoiceGain, calculateTimingOffsets } from "./mix";
+import type { Song } from "../mml/types";
+import { createPlaybackPlan, flattenSongEvents } from "./playbackPlan";
 import { Synth } from "./synth";
 
 const defaultSampleRate = 44100;
@@ -109,9 +109,7 @@ async function renderSongAudio(song: Song, sampleRate: number, durationSec: numb
   const frameCount = Math.max(1, Math.ceil(durationSec * sampleRate));
   const context = new OfflineAudioContext(channelCount, frameCount, sampleRate);
   const synth = new Synth(context, { outputChannels: channelCount });
-  const events = flattenSongEvents(song);
-  const voiceGain = calculateSongVoiceGain(events);
-  const timingOffsets = calculateTimingOffsets(events, song.master.tempoEvents);
+  const { events, voiceGain, timingOffsets } = createPlaybackPlan(song);
 
   for (const event of events) {
     synth.schedule(event, event.startTimeSec + (timingOffsets.get(event) ?? 0), song.patches, { voiceGain });
@@ -120,12 +118,6 @@ async function renderSongAudio(song: Song, sampleRate: number, durationSec: numb
   const rendered = await context.startRendering();
   synth.disconnect();
   return rendered;
-}
-
-function flattenSongEvents(song: Song): NoteEvent[] {
-  return song.tracks
-    .flatMap((track) => track.events)
-    .sort((a, b) => a.startTimeSec - b.startTimeSec || a.trackIndex - b.trackIndex);
 }
 
 function readChannels(buffer: AudioBufferLike): Float32Array[] {

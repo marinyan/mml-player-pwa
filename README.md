@@ -259,6 +259,18 @@ npm run build
 
 ビルド成果物は `dist/` に生成されます。
 
+### ソース構成
+
+| パス | 責務 |
+| --- | --- |
+| `src/mml/` | MML前処理、パース、Song生成、音色レジストリ |
+| `src/audio/` | 共通再生計画、リアルタイム再生、シンセ、WAV出力 |
+| `src/midi/` | テンポマップ変換、SMF出力 |
+| `src/ui/` | ファイル名、警告、表示形式などのUI補助 |
+| `src/storage/` | localStorageとテキストファイル入出力 |
+| `src/demo/` | デフォルトのデモ曲 |
+| `src/app.ts` | 画面構築と各機能の接続 |
+
 ## GitHub Pagesへの配置
 
 `vite.config.ts` の `base` はリポジトリ名 `mml-player-pwa` 用に設定しています。

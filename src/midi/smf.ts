@@ -1,4 +1,5 @@
-import type { NoteEvent, Song, TempoEvent } from "../mml/types";
+import type { NoteEvent, Song } from "../mml/types";
+import { createTempoMap, type TempoMap } from "./tempoMap";
 
 const ticksPerQuarter = 480;
 const gmSystemOn = [0xf0, 0x05, 0x7e, 0x7f, 0x09, 0x01, 0xf7];
@@ -23,10 +24,10 @@ export function exportSongToSmf(song: Song): Blob {
     throw new Error(`MIDI export supports up to ${melodicChannels.length} GM tracks`);
   }
 
-  const tempoEvents = normalizeTempoEvents(song.master.tempoEvents);
+  const tempoMap = createTempoMap(song.master.tempoEvents);
   const tracks = [
-    encodeTrack(createConductorEvents(song, tempoEvents)),
-    ...gmTracks.map((events, index) => encodeTrack(createGmTrackEvents(events, melodicChannels[index], tempoEvents)))
+    encodeTrack(createConductorEvents(song, tempoMap)),
+    ...gmTracks.map((events, index) => encodeTrack(createGmTrackEvents(events, melodicChannels[index], tempoMap)))
   ];
 
   const header = [
@@ -48,13 +49,13 @@ function isGmNote(event: NoteEvent): boolean {
   return event.frequencyHz !== null && event.gmProgram !== null;
 }
 
-function createConductorEvents(song: Song, tempoEvents: TempoEvent[]): MidiEvent[] {
+function createConductorEvents(song: Song, tempoMap: TempoMap): MidiEvent[] {
   const events: MidiEvent[] = [{ tick: 0, priority: 0, bytes: gmSystemOn }];
 
-  for (const event of tempoEvents) {
+  for (const event of tempoMap.events) {
     const microsPerQuarter = Math.round(60_000_000 / event.tempo);
     events.push({
-      tick: secondsToTicks(event.timeSec, tempoEvents),
+      tick: tempoMap.secondsToTicks(event.timeSec),
       priority: 1,
       bytes: [0xff, 0x51, 0x03, (microsPerQuarter >> 16) & 0xff, (microsPerQuarter >> 8) & 0xff, microsPerQuarter & 0xff]
     });
@@ -71,15 +72,15 @@ function createConductorEvents(song: Song, tempoEvents: TempoEvent[]): MidiEvent
   return events;
 }
 
-function createGmTrackEvents(notes: NoteEvent[], channel: number, tempoEvents: TempoEvent[]): MidiEvent[] {
+function createGmTrackEvents(notes: NoteEvent[], channel: number, tempoMap: TempoMap): MidiEvent[] {
   const events: MidiEvent[] = [];
   let currentProgram: number | null = null;
   let currentVolume: number | null = null;
   let currentPan: number | null = null;
 
   for (const note of notes) {
-    const startTick = secondsToTicks(note.startTimeSec, tempoEvents);
-    const endTick = Math.max(startTick + 1, secondsToTicks(note.startTimeSec + note.gateDurationSec, tempoEvents));
+    const startTick = tempoMap.secondsToTicks(note.startTimeSec);
+    const endTick = Math.max(startTick + 1, tempoMap.secondsToTicks(note.startTimeSec + note.gateDurationSec));
     const program = clamp((note.gmProgram ?? 1) - 1, 0, 127);
     const volume = clamp(Math.round(note.volume * 127), 0, 127);
     const pan = clamp(note.pan, 0, 127);
@@ -116,36 +117,6 @@ function encodeTrack(events: MidiEvent[]): number[] {
   body.push(0, 0xff, 0x2f, 0);
 
   return [...ascii("MTrk"), ...uint32(body.length), ...body];
-}
-
-function normalizeTempoEvents(events: TempoEvent[]): TempoEvent[] {
-  const byTime = new Map<number, TempoEvent>();
-  byTime.set(0, { type: "setTempo", timeSec: 0, tempo: 120 });
-  for (const event of events) {
-    byTime.set(event.timeSec, event);
-  }
-  return [...byTime.values()].sort((a, b) => a.timeSec - b.timeSec);
-}
-
-function secondsToTicks(seconds: number, tempoEvents: TempoEvent[]): number {
-  let ticks = 0;
-  let segmentStartSec = 0;
-  let tempo = tempoEvents[0]?.tempo ?? 120;
-
-  for (const event of tempoEvents) {
-    if (event.timeSec <= segmentStartSec) {
-      tempo = event.tempo;
-      continue;
-    }
-    if (event.timeSec >= seconds) break;
-
-    ticks += (event.timeSec - segmentStartSec) * ticksPerQuarter * tempo / 60;
-    segmentStartSec = event.timeSec;
-    tempo = event.tempo;
-  }
-
-  ticks += (seconds - segmentStartSec) * ticksPerQuarter * tempo / 60;
-  return Math.max(0, Math.round(ticks));
 }
 
 function frequencyToMidiNote(frequencyHz: number): number {

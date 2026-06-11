@@ -7,6 +7,7 @@ import { exportSongToSmf, gmTrackCount } from "./midi/smf";
 import { createMmlTextBlob } from "./storage/fileText";
 import { loadLastExportedMml, loadSavedMml, saveLastExportedMml, saveMml } from "./storage/localStorage";
 import { requestExportFileName } from "./ui/exportFile";
+import { createDebouncedTask } from "./ui/debouncedTask";
 import { formatPosition } from "./ui/position";
 import { confirmBeforeReplacingMml } from "./ui/replaceWarning";
 
@@ -130,9 +131,15 @@ export function mountApp(root: HTMLElement): void {
     }
   };
 
+  const compileAfterInput = createDebouncedTask(compileCurrent, 150);
+  const compileNow = (): Song | null => {
+    compileAfterInput.cancel();
+    return compileCurrent();
+  };
+
   input.addEventListener("input", () => {
     saveMml(input.value);
-    compileCurrent();
+    compileAfterInput.schedule();
   });
 
   loadDemoButton.addEventListener("click", () => {
@@ -140,7 +147,7 @@ export function mountApp(root: HTMLElement): void {
     if (!confirmBeforeReplacingMml(input.value, lastExportedMml, window.confirm)) return;
     input.value = defaultMml;
     saveMml(input.value);
-    compileCurrent();
+    compileNow();
     message.textContent = "Loaded demo song";
     message.classList.remove("error");
     message.classList.remove("warning");
@@ -160,7 +167,7 @@ export function mountApp(root: HTMLElement): void {
     void file.text().then((text) => {
       input.value = text;
       saveMml(text);
-      compileCurrent();
+      compileNow();
       message.textContent = `Imported ${file.name}`;
       message.classList.remove("error");
       message.classList.remove("warning");
@@ -186,7 +193,7 @@ export function mountApp(root: HTMLElement): void {
 
   wavExportButton.addEventListener("click", () => {
     fileMenu.open = false;
-    const song = compileCurrent();
+    const song = compileNow();
     if (!song || eventCount(song) === 0) return;
 
     const fileName = requestExportFileName("mml-export.wav", ".wav", window.prompt);
@@ -227,7 +234,7 @@ export function mountApp(root: HTMLElement): void {
 
   midiExportButton.addEventListener("click", () => {
     fileMenu.open = false;
-    const song = compileCurrent();
+    const song = compileNow();
     if (!song) return;
     if (gmTrackCount(song) === 0) {
       message.textContent = "MIDI export requires at least one @gm note";
@@ -253,7 +260,7 @@ export function mountApp(root: HTMLElement): void {
   });
 
   playButton.addEventListener("click", () => {
-    const next = compileCurrent();
+    const next = compileNow();
     if (!next || eventCount(next) === 0) return;
     void scheduler.play(next);
   });
@@ -269,7 +276,7 @@ export function mountApp(root: HTMLElement): void {
   window.addEventListener("online", updateOnlineState);
   window.addEventListener("offline", updateOnlineState);
   updateOnlineState();
-  compileCurrent();
+  compileNow();
 
   if (compiled === null) {
     statusValue.textContent = statusLabel(scheduler.getStatus());
