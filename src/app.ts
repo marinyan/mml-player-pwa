@@ -7,6 +7,7 @@ import { exportSongToSmf, gmTrackCount } from "./midi/smf";
 import { createMmlTextBlob } from "./storage/fileText";
 import { loadLastExportedMml, loadSavedMml, saveLastExportedMml, saveMml } from "./storage/localStorage";
 import { requestExportFileName } from "./ui/exportFile";
+import { formatPosition } from "./ui/position";
 import { confirmBeforeReplacingMml } from "./ui/replaceWarning";
 
 export function mountApp(root: HTMLElement): void {
@@ -56,7 +57,7 @@ export function mountApp(root: HTMLElement): void {
         </div>
         <div>
           <span class="label">Position</span>
-          <strong id="positionValue">0.0s</strong>
+          <strong id="positionValue">0.0s / 0.0s</strong>
         </div>
       </section>
 
@@ -83,14 +84,16 @@ export function mountApp(root: HTMLElement): void {
 
   input.value = loadSavedMml(defaultMml);
   let compiled: Song | null = null;
+  let positionSec = 0;
   let lastExportedMml = loadLastExportedMml();
 
   const scheduler = new Scheduler({
     onStatusChange: (status) => {
       statusValue.textContent = statusLabel(status);
     },
-    onTick: (positionSec) => {
-      positionValue.textContent = `${positionSec.toFixed(1)}s`;
+    onTick: (nextPositionSec) => {
+      positionSec = nextPositionSec;
+      positionValue.textContent = formatPosition(positionSec, compiled?.durationSec ?? 0);
     }
   });
 
@@ -107,6 +110,8 @@ export function mountApp(root: HTMLElement): void {
       message.classList.toggle("warning", next.master.diagnostics.length > 0);
       message.classList.remove("error");
       compiled = next;
+      positionSec = Math.min(positionSec, next.durationSec);
+      positionValue.textContent = formatPosition(positionSec, next.durationSec);
       return next;
     } catch (error) {
       const text =
@@ -119,6 +124,8 @@ export function mountApp(root: HTMLElement): void {
       message.classList.add("error");
       message.classList.remove("warning");
       compiled = null;
+      positionSec = 0;
+      positionValue.textContent = formatPosition(0, 0);
       return null;
     }
   };

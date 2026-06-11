@@ -35,7 +35,7 @@ export class Scheduler {
     this.tickTimerId = window.setInterval(() => this.reportPosition(song.durationSec), 100);
   }
 
-  stop(nextStatus: PlaybackStatus = "stopped"): void {
+  stop(nextStatus: PlaybackStatus = "stopped", resetPosition = true): void {
     if (this.timerId !== null) {
       window.clearInterval(this.timerId);
       this.timerId = null;
@@ -49,7 +49,9 @@ export class Scheduler {
     void this.audioContext?.close();
     this.audioContext = null;
     this.nextEventIndex = 0;
-    this.callbacks.onTick?.(0);
+    if (resetPosition) {
+      this.callbacks.onTick?.(0);
+    }
     this.setStatus(nextStatus);
   }
 
@@ -79,7 +81,8 @@ export class Scheduler {
     }
 
     if (playheadSec >= song.durationSec + 0.05) {
-      this.stop("ended");
+      this.callbacks.onTick?.(song.durationSec);
+      this.stop("ended", false);
     }
   }
 
