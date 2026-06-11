@@ -22,6 +22,7 @@ export class Synth {
   private compressor: DynamicsCompressorNode;
   private readonly outputChannels: number;
   private readonly merger: ChannelMergerNode | null;
+  private noiseBuffer: AudioBuffer | null = null;
 
   constructor(private readonly audioContext: SynthAudioContext, options: SynthOptions = {}) {
     this.outputChannels = Math.min(Math.max(options.outputChannels ?? 2, 1), 6);
@@ -118,26 +119,37 @@ export class Synth {
   }
 
   private scheduleNoise(event: NoteEvent, output: AudioNode, startAt: number, endAt: number): void {
-    const durationSec = Math.max(endAt - startAt + 0.02, 0.02);
-    const frameCount = Math.ceil(this.audioContext.sampleRate * durationSec);
-    const buffer = this.audioContext.createBuffer(1, frameCount, this.audioContext.sampleRate);
-    const channel = buffer.getChannelData(0);
-
-    for (let index = 0; index < frameCount; index += 1) {
-      channel[index] = Math.random() * 2 - 1;
-    }
-
     const source = this.audioContext.createBufferSource();
     const filter = this.audioContext.createBiquadFilter();
     filter.type = "bandpass";
     filter.frequency.setValueAtTime(Math.max(event.frequencyHz ?? 1200, 80), startAt);
     filter.Q.setValueAtTime(0.8, startAt);
 
-    source.buffer = buffer;
+    source.buffer = this.getNoiseBuffer();
+    source.loop = true;
     source.connect(filter);
     filter.connect(output);
     source.start(startAt);
     source.stop(endAt + 0.01);
+  }
+
+  private getNoiseBuffer(): AudioBuffer {
+    if (this.noiseBuffer) return this.noiseBuffer;
+
+    const frameCount = Math.ceil(this.audioContext.sampleRate);
+    const buffer = this.audioContext.createBuffer(1, frameCount, this.audioContext.sampleRate);
+    const channel = buffer.getChannelData(0);
+    let state = 0x6d2b79f5;
+
+    for (let index = 0; index < frameCount; index += 1) {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      channel[index] = ((state >>> 0) / 0xffffffff) * 2 - 1;
+    }
+
+    this.noiseBuffer = buffer;
+    return buffer;
   }
 
   private scheduleUserFm(event: NoteEvent, patch: FmPatch, output: AudioNode, startAt: number, endAt: number): void {

@@ -94,6 +94,22 @@ describe("compileMml", () => {
     expect(events(result).map((event) => event.startTimeSec)).toEqual([0, 0]);
   });
 
+  it("keeps matching multiline tracks aligned across octaves", () => {
+    const result = compileMml(`T132 O4 L8 @gm27
+G1F2.D+2.F2&>C4<
+G8D8C8D8C8<G8>,
+T132 O5 L8 @gm27
+G1F2.D+2.F2&>C4<
+G8D8C8D8C8<G8>`);
+    const lower = result.tracks[0].events;
+    const upper = result.tracks[1].events;
+
+    expect(upper.map((event) => event.startTimeSec)).toEqual(lower.map((event) => event.startTimeSec));
+    expect(upper.map((event) => event.durationSec)).toEqual(lower.map((event) => event.durationSec));
+    expect(upper.map((event) => event.gateDurationSec)).toEqual(lower.map((event) => event.gateDurationSec));
+    expect(upper[0].frequencyHz! / lower[0].frequencyHz!).toBeCloseTo(2);
+  });
+
   it("compiles timbre changes", () => {
     const result = compileMml("@1 C @4 D @5 E @6 F");
     expect(events(result).map((event) => event.timbre)).toEqual([1, 4, 5, 6]);
