@@ -306,13 +306,16 @@ G8D8C8D8C8<G8>`);
     expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節長超過"))).toBe(true);
   });
 
-  it("treats length 1 as one current measure", () => {
-    const result = compileMml("#TIME 3/4 T120 C1 | #TIME 4/4 C1 |");
-    expect(events(result)).toHaveLength(2);
-    expect(events(result)[0].durationSec).toBeCloseTo(1.5);
-    expect(events(result)[1].startTimeSec).toBeCloseTo(1.5);
-    expect(events(result)[1].durationSec).toBeCloseTo(2);
-    expect(result.master.diagnostics).toEqual([]);
+  it("keeps note length 1 as a four-beat whole note regardless of meter", () => {
+    const result = compileMml("#TIME 3/4 T120 C1 D");
+    expect(events(result)[0].durationSec).toBeCloseTo(2);
+    expect(events(result)[1].startTimeSec).toBeCloseTo(2);
+  });
+
+  it("keeps rest length 1 as a four-beat whole rest regardless of meter", () => {
+    const result = compileMml("#TIME 3/4 T120 R1 C");
+    expect(events(result)[0].durationSec).toBeCloseTo(2);
+    expect(events(result)[1].startTimeSec).toBeCloseTo(2);
   });
 
   it("does not create NoteEvents from measure bars", () => {
@@ -343,6 +346,24 @@ G8D8C8D8C8<G8>`);
   it("does not warn when explicit measure bars align across tracks", () => {
     const result = compileMml("L4 C D E F |, L4 C D E F |");
     expect(result.master.diagnostics.some((diagnostic) => diagnostic.message.includes("小節線位置"))).toBe(false);
+  });
+
+  it("applies the master time signature to every track", () => {
+    const result = compileMml("#TIME 3/4 L4 C D E |, L4 C D E |");
+
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1440, explicit: true, trackIndex: 0 });
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1440, explicit: true, trackIndex: 1 });
+    expect(result.master.diagnostics).toEqual([]);
+  });
+
+  it("applies master time signature changes to every track", () => {
+    const result = compileMml(
+      "#TIME 3/4 L4 C D E | #TIME 4/4 C D E F |, L4 C D E | C D E F |"
+    );
+
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 1440, explicit: true, trackIndex: 1 });
+    expect(result.master.measureBoundaries).toContainEqual({ tick: 3360, explicit: true, trackIndex: 1 });
+    expect(result.master.diagnostics).toEqual([]);
   });
 
   it("warns when explicit measure bars do not align across tracks", () => {
