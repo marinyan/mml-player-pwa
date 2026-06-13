@@ -15,7 +15,16 @@ export type MmlCommand =
   | { kind: "timeSignature"; numerator: number; denominator: number; position: number }
   | { kind: "measureBoundary"; position: number }
   | { kind: "tuplet"; commands: MmlCommand[]; length: number; dotted: boolean; position: number }
-  | { kind: "chord"; notes: ChordNote[]; length: number | null; dotted: boolean; position: number }
+  | {
+      kind: "chord";
+      notes: ChordNote[];
+      tuplets: ChordTuplet[];
+      length: number | null;
+      dotted: boolean;
+      arpeggioLength: number | null;
+      arpeggioDotted: boolean;
+      position: number;
+    }
   | { kind: "octaveShift"; delta: -1 | 1; position: number }
   | { kind: "note"; note: string; accidental: number; length: number | null; dotted: boolean; position: number }
   | { kind: "rest"; length: number | null; dotted: boolean; position: number };
@@ -28,6 +37,13 @@ export interface ChordNote {
   note: string;
   accidental: number;
   octaveDelta: number;
+}
+
+export interface ChordTuplet {
+  items: Array<ChordNote | null>;
+  length: number;
+  dotted: boolean;
+  position: number;
 }
 
 export interface MmlAst {
@@ -196,10 +212,15 @@ class Parser {
 
   private readChord(token: MmlToken): MmlCommand {
     const notes: ChordNote[] = [];
+    const tuplets: ChordTuplet[] = [];
     let octaveDelta = 0;
 
     while (this.peekOrNull()?.value !== ")") {
       if (this.isEnd()) throw new MmlError(token.position, "Chord requires )");
+      if (this.peek().value === "{") {
+        tuplets.push(this.readChordTuplet(octaveDelta));
+        continue;
+      }
       const item = this.consume();
       if (item.value === "<" || item.value === ">") {
         octaveDelta += item.value === ">" ? 1 : -1;
@@ -222,11 +243,64 @@ class Parser {
     }
 
     this.index += 1;
-    if (notes.length === 0) throw new MmlError(token.position, "Chord requires at least one note");
+    if (notes.length === 0 && tuplets.length === 0) throw new MmlError(token.position, "Chord requires at least one note");
     const length = this.readOptionalNumber();
     if (length !== null && length <= 0) throw new MmlError(token.position, "Chord length must be greater than 0");
     const dotted = this.readOptionalDot();
-    return { kind: "chord", notes, length, dotted, position: token.position };
+    let arpeggioLength: number | null = null;
+    let arpeggioDotted = false;
+    if (this.peekOrNull()?.value === ":") {
+      this.index += 1;
+      arpeggioLength = this.readRequiredNumber(token.position, "Arpeggio requires a step length after :");
+      if (arpeggioLength <= 0) throw new MmlError(token.position, "Arpeggio step length must be greater than 0");
+      arpeggioDotted = this.readOptionalDot();
+    }
+    if (arpeggioLength !== null && tuplets.length > 0) {
+      throw new MmlError(token.position, "Arpeggios cannot contain tuplets");
+    }
+    return { kind: "chord", notes, tuplets, length, dotted, arpeggioLength, arpeggioDotted, position: token.position };
+  }
+
+  private readChordTuplet(initialOctaveDelta: number): ChordTuplet {
+    const token = this.consume();
+    const items: Array<ChordNote | null> = [];
+    let octaveDelta = initialOctaveDelta;
+
+    while (this.peekOrNull()?.value !== "}") {
+      if (this.isEnd()) throw new MmlError(token.position, "Chord tuplet requires }");
+      const item = this.consume();
+      if (item.value === "<" || item.value === ">") {
+        octaveDelta += item.value === ">" ? 1 : -1;
+        continue;
+      }
+      if (item.value === "R") {
+        items.push(null);
+        continue;
+      }
+      if (!noteLetters.has(item.value)) {
+        throw new MmlError(item.position, "Chord tuplets can contain only notes, rests, accidentals, and octave shifts");
+      }
+
+      let accidental = 0;
+      const next = this.peekOrNull();
+      if (next?.value === "#" || next?.value === "+") {
+        accidental = 1;
+        this.index += 1;
+      } else if (next?.value === "-") {
+        accidental = -1;
+        this.index += 1;
+      }
+      items.push({ note: item.value, accidental, octaveDelta });
+    }
+
+    this.index += 1;
+    const length = this.readRequiredNumber(token.position, "Chord tuplet requires a total length after }");
+    if (length <= 0) throw new MmlError(token.position, "Chord tuplet length must be greater than 0");
+    const dotted = this.readOptionalDot();
+    if (items.length === 0 || items.every((item) => item === null)) {
+      throw new MmlError(token.position, "Chord tuplet requires at least one note");
+    }
+    return { items, length, dotted, position: token.position };
   }
 
   private readNote(token: MmlToken): MmlCommand {

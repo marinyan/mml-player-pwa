@@ -472,8 +472,73 @@ G8D8C8D8C8<G8>`);
     expect(events(result)[5].startTimeSec).toBeCloseTo(0.5);
   });
 
+  it("compiles inline chord arpeggios in written order", () => {
+    const result = compileMml("T120 O4 (CEG)2:16 A");
+    const chordEvents = events(result).slice(0, 3);
+
+    expect(chordEvents.map((event) => event.startTimeSec)).toEqual([0, 0.125, 0.25]);
+    expect(chordEvents.map((event) => event.durationSec)).toEqual([1, 0.875, 0.75]);
+    expect(chordEvents.map((event) => event.frequencyHz)).toEqual([
+      noteFrequency("C", 4, 0),
+      noteFrequency("E", 4, 0),
+      noteFrequency("G", 4, 0)
+    ]);
+    expect(events(result)[3].startTimeSec).toBe(1);
+  });
+
+  it("supports descending and dotted-step arpeggios", () => {
+    const result = compileMml("T120 O4 (GEC)2:16.");
+    expect(events(result).map((event) => event.startTimeSec)).toEqual([0, 0.1875, 0.375]);
+    expect(events(result).map((event) => event.frequencyHz)).toEqual([
+      noteFrequency("G", 4, 0),
+      noteFrequency("E", 4, 0),
+      noteFrequency("C", 4, 0)
+    ]);
+  });
+
+  it("supports tuplets inside inline chords", () => {
+    const result = compileMml("T120 O4 (C { E F G }4)2 A");
+    const chordEvents = events(result).slice(0, 4);
+
+    expect(chordEvents.map((event) => event.startTimeSec)).toEqual([0, 0, 1 / 6, 1 / 3]);
+    expect(chordEvents.map((event) => event.durationSec)).toEqual([1, 1 / 6, 1 / 6, 1 / 6]);
+    expect(events(result)[4].startTimeSec).toBe(1);
+  });
+
+  it("supports rests, accidentals, and octave shifts in chord tuplets", () => {
+    const result = compileMml("T120 O4 (C { E R F# > G }2)2");
+    const chordEvents = events(result);
+
+    expect(chordEvents.map((event) => event.startTimeSec)).toEqual([0, 0, 0.5, 0.75]);
+    expect(chordEvents.map((event) => event.frequencyHz)).toEqual([
+      noteFrequency("C", 4, 0),
+      noteFrequency("E", 4, 0),
+      noteFrequency("F", 4, 1),
+      noteFrequency("G", 5, 0)
+    ]);
+  });
+
+  it("supports chord tuplets inside outer tuplets", () => {
+    const result = compileMml("T120 { (C { E F G }16) D E }4 A");
+    expect(events(result).at(-1)?.startTimeSec).toBeCloseTo(0.5);
+  });
+
   it("rejects invalid chords and chord ties", () => {
-    for (const source of ["()4", "(CRG)4", "(CEG", "(CEG)0", "C&(EG)4", "(CEG)4&D"]) {
+    for (const source of [
+      "()4",
+      "(CRG)4",
+      "(CEG",
+      "(CEG)0",
+      "C&(EG)4",
+      "(CEG)4&D",
+      "(CEG)4:",
+      "(CEG)4:0",
+      "(CEG)16:4",
+      "(C { E F G })2",
+      "(C { R R R }4)2",
+      "(C { E F G }1)4",
+      "(C { E F G }4)2:16"
+    ]) {
       expect(() => compileMml(source)).toThrow(MmlError);
     }
   });

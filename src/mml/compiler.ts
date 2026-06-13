@@ -253,13 +253,51 @@ function createChordEvents(
     ?? noteDurationSec(command.length ?? state.defaultLength, state.tempo, command.dotted);
   const durationTicks = timingOverride?.durationTicks
     ?? noteDurationTicks(command.length ?? state.defaultLength, command.dotted);
-  const gateDurationSec = durationSec * Math.min(Math.max(state.gate, 1), 8) / 8;
   const startTimeSec = state.cursorSec;
-  const events = command.notes.map((note): NoteEvent => ({
+  const events: NoteEvent[] = [];
+  const arpeggioStepSec = command.arpeggioLength === null
+    ? 0
+    : noteDurationSec(command.arpeggioLength, state.tempo, command.arpeggioDotted);
+
+  command.notes.forEach((note, index) => {
+    const offsetSec = arpeggioStepSec * index;
+    if (offsetSec >= durationSec) {
+      throw new MmlError(command.position, "Arpeggio notes must start before the chord ends");
+    }
+    events.push(createChordNoteEvent(note, state, trackIndex, startTimeSec + offsetSec, durationSec - offsetSec));
+  });
+
+  for (const tuplet of command.tuplets) {
+    const tupletDurationSec = noteDurationSec(tuplet.length, state.tempo, tuplet.dotted);
+    if (tupletDurationSec > durationSec) {
+      throw new MmlError(tuplet.position, "Chord tuplet must fit within the chord length");
+    }
+    const itemDurationSec = tupletDurationSec / tuplet.items.length;
+    tuplet.items.forEach((note, index) => {
+      if (note === null) return;
+      events.push(createChordNoteEvent(note, state, trackIndex, startTimeSec + itemDurationSec * index, itemDurationSec));
+    });
+  }
+
+  state.cursorSec += durationSec;
+  state.cursorTicks += durationTicks;
+  state.lastNoteEvent = null;
+  advanceDynamic(state);
+  return events;
+}
+
+function createChordNoteEvent(
+  note: { note: string; accidental: number; octaveDelta: number },
+  state: CompilerState,
+  trackIndex: number,
+  startTimeSec: number,
+  durationSec: number
+): NoteEvent {
+  return {
     trackIndex,
     startTimeSec,
     durationSec,
-    gateDurationSec,
+    gateDurationSec: durationSec * Math.min(Math.max(state.gate, 1), 8) / 8,
     frequencyHz: noteFrequency(note.note, state.octave + note.octaveDelta, note.accidental),
     volume: state.volume / 15,
     pan: state.pan,
@@ -268,12 +306,7 @@ function createChordEvents(
     gmProgram: state.gmProgram,
     slurred: false,
     connectedToNext: false
-  }));
-  state.cursorSec += durationSec;
-  state.cursorTicks += durationTicks;
-  state.lastNoteEvent = null;
-  advanceDynamic(state);
-  return events;
+  };
 }
 
 function createNoteEvent(
