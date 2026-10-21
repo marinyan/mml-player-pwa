@@ -4,6 +4,9 @@
   "private": true,
   "license": "BSD-2-Clause",
   "type": "module",
+  "engines": {
+    "node": "^24.22.1"
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
@@ -13,7 +16,7 @@
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.1.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4",
-    "vitest": "^4.0.14"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
   }
 }

@@ -258,10 +258,16 @@ T120 O4 L8
 
 ## 開発
 
-Node.jsとnpmが必要です。
+Node.js 24.22.1以上の24系とnpmが必要です。Node.jsは開発・テスト・ビルドに使用し、
+公開アプリはブラウザ内で動作します。
+
+2026年10月21日の[Node.jsセキュリティ更新](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
+を反映したバージョンを最低要件にしています。`package.json` の `engines.node` で
+指定し、npmでの依存関係インストール時にも確認します。GitHub Actionsは同じ指定を
+読み取り、条件を満たす最新の24系を使用します。
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
